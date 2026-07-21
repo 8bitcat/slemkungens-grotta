@@ -96,6 +96,7 @@ function startHost(){
     const peer = new Peer('slemkung-'+NET.code);
     NET.peer = peer;
     peer.on('open', ()=>{ NET.open = true; updateQR(); });
+    peer.on('disconnected', ()=>{ try{ peer.reconnect(); }catch(e){} });
     peer.on('error', err=>{
       if(err && err.type==='unavailable-id' && tries++ < 5){ try{ peer.destroy(); }catch(e){} attempt(); }
       // andra fel (t.ex. offline): spela vidare lokalt utan nätspel
@@ -103,8 +104,8 @@ function startHost(){
     peer.on('connection', conn=>{
       conn.on('open', ()=>{
         // återta en övergiven mobilplats om någon tappat anslutningen
-        const orphan = (arr, get)=>arr.map(get).find(cid=>cid && cid[0]==='n' && (!NET.ctrls[cid] || !NET.ctrls[cid].alive));
-        let id = state==='select' ? orphan(joiners, j=>j.ctrlId) : orphan(players, p=>p.ctrlId);
+        const allIds = [...joiners.map(j=>j.ctrlId), ...players.map(p=>p.ctrlId)];
+        let id = allIds.find(cid=>cid && cid[0]==='n' && (!NET.ctrls[cid] || !NET.ctrls[cid].alive));
         if(!id) id = 'n'+(NET.nextIdx++);
         NET.ctrls[id] = { conn, alive:true, state:{x:0,y:0,attack:false,special:false} };
         conn.on('data', d=>{
@@ -132,10 +133,11 @@ function pushStatus(){
   NET.lastPush = time;
   for(const id of netCtrlIds()){
     let msg = { t:'you', st:'lobby' };
-    if(state==='select'){
-      const ji = joiners.findIndex(j=>j.ctrlId===id);
-      if(ji>=0) msg = { t:'you', st:'select', n:ji+1, color:PCOLORS[ji], cls:CLASSES[joiners[ji].ci].name, ready:joiners[ji].ready };
-    } else {
+    const ji = joiners.findIndex(j=>j.ctrlId===id);
+    if(ji>=0){
+      const n = (state==='select' ? ji : players.length+ji) + 1;
+      msg = { t:'you', st:'select', n, color:PCOLORS[(n-1)%5], cls:CLASSES[joiners[ji].ci].name, ready:joiners[ji].ready };
+    } else if(state!=='select'){
       const p = players.find(q=>q.ctrlId===id);
       if(p) msg = { t:'you', st:state, n:p.id+1, color:p.color, cls:p.cls.name, hp:p.hp, maxhp:p.maxhp, cd:1-p.cdS/pCd(p), downed:p.downed };
     }
@@ -143,7 +145,16 @@ function pushStatus(){
   }
 }
 const qrPanel = document.getElementById('qrPanel');
-function joinLink(){ return location.origin + location.pathname + '?room=' + NET.code; }
+// Publika adressen används alltid i QR/länkar — rummet kopplas via PeerJS-molnet,
+// så mobiler når värden även när värdsidan körs från localhost.
+const PUBLIC_URL = 'https://8bitcat.github.io/slemkungens-grotta/';
+function joinLink(){
+  const base = location.hostname==='8bitcat.github.io'
+    ? location.origin + location.pathname
+    : PUBLIC_URL;
+  return base + '?room=' + NET.code;
+}
+function joinHost(){ return joinLink().replace(/^https?:\/\//,'').replace(/\?.*$/,''); }
 function updateQR(){
   if(!NET.open) return;
   qrPanel.innerHTML = '<img width="150" height="150" alt="QR" src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&color=231a30&bgcolor=f4f0e4&data='+encodeURIComponent(joinLink())+'">'
@@ -1013,19 +1024,31 @@ function ctrlLabel(id){
   if(id[0]==='n') return 'Mobil';
   return 'Handkontroll '+(+id.slice(1)+1);
 }
+function makePlayer(i, ctrlId, cls, x, y){
+  return {
+    id:i, color:PCOLORS[i%5], ctrlId, cls, x, y,
+    fx:0, fy:-1, hp:cls.hp, maxhp:cls.hp, r:9,
+    cdA:0, cdS:0, swingT:0, swingDur:0.2, swingAng:0, swingArc:2.4, spin:false,
+    dashT:0, dashHit:null, invT:0,
+    downed:false, reviveT:0, kbx:0, kby:0, walkT:0, flashT:0, dustT:0,
+    up:{hp:0, dmg:0, spd:0, cdr:0},
+    stats:{dmg:0, heal:0, downs:0, kills:0}
+  };
+}
+function dropIn(j){
+  const anchor = players.find(q=>!q.downed) || players[0];
+  const px = anchor ? anchor.x : cam.x+VW/2;
+  const py = anchor ? anchor.y+24 : cam.y+VH/2;
+  const p = makePlayer(players.length, j.ctrlId, CLASSES[j.ci], px, py);
+  p.invT = 2;
+  players.push(p);
+  sfx('revive');
+  burst(px, py-10, '#f0c33c', 16, 120);
+  toast(p.cls.name+' hoppar in i äventyret!');
+}
 function startGame(){
-  players = joiners.map((j,i)=>{
-    const cls = CLASSES[j.ci];
-    return {
-      id:i, color:PCOLORS[i], ctrlId:j.ctrlId, cls,
-      x:(60+i*1.3)*TS+(i%2)*14, y:85.5*TS,
-      fx:0, fy:-1, hp:cls.hp, maxhp:cls.hp, r:9,
-      cdA:0, cdS:0, swingT:0, dashT:0, dashHit:null, invT:0,
-      downed:false, reviveT:0, kbx:0, kby:0, walkT:0, flashT:0, dustT:0,
-      up:{hp:0, dmg:0, spd:0, cdr:0},
-      stats:{dmg:0, heal:0, downs:0, kills:0}
-    };
-  });
+  players = joiners.map((j,i)=>makePlayer(i, j.ctrlId, CLASSES[j.ci], (60+i*1.3)*TS+(i%2)*14, 85.5*TS));
+  joiners = [];
   worlds = buildWorlds(players.length);
   cur = 'ow'; shots=[]; parts=[]; texts=[]; coins=0; camSnap=true;
   paused=false; state='play';
@@ -1465,7 +1488,7 @@ function update(dt){
     parts = parts.filter(p=>p.ttl>0);
     const anyA = players.some(p=>C(p.ctrlId).aJP) || C('k0').aJP;
     const anyS = players.some(p=>C(p.ctrlId).sJP);
-    if(winT>1.2 && anyA){ if(state==='win'){ joiners=[]; state='select'; } else resetRun(); }
+    if(winT>1.2 && anyA){ if(state==='win'){ joiners=[]; players=[]; state='select'; } else resetRun(); }
     if(winT>1.2 && anyS && state==='win'){ resetRun(); }
     return;
   }
@@ -1480,6 +1503,20 @@ function update(dt){
     else if(trans.phase==='in' && trans.t>=1) trans = null;
     if(trans && trans.phase==='out') return;
   }
+
+  // drop-in: nya kontroller kan hoppa in mitt i spelet
+  scanForJoiners();
+  joiners = joiners.filter(j=> j.ctrlId[0]!=='n' || (NET.ctrls[j.ctrlId] && NET.ctrls[j.ctrlId].alive));
+  for(const j of joiners){
+    const jc = C(j.ctrlId);
+    if(j.fresh){ j.fresh = false; continue; }
+    if(jc.lJP){ j.ci = (j.ci+4)%5; sfx('bolt'); }
+    if(jc.rJP){ j.ci = (j.ci+1)%5; sfx('bolt'); }
+    if(jc.aJP) j.spawn = true;
+    if(jc.sJP) j.remove = true;
+  }
+  joiners.filter(j=>j.spawn).forEach(dropIn);
+  joiners = joiners.filter(j=>!j.spawn && !j.remove);
 
   for(const p of players) updPlayer(p, dt);
 
@@ -1520,19 +1557,21 @@ function update(dt){
 }
 
 // ===================== VAL-SKÄRM =====================
-function updSelect(dt){
-  // gå med
-  const usedIds = new Set(joiners.map(j=>j.ctrlId));
+function scanForJoiners(){
+  const used = new Set([...joiners.map(j=>j.ctrlId), ...players.map(p=>p.ctrlId)]);
   const candidates = ['k0','k1', ...netCtrlIds()];
   const gps = pads();
   for(let i=0;i<gps.length;i++) if(gps[i]) candidates.push('p'+i);
   for(const id of candidates){
-    if(usedIds.has(id)) continue;
-    if(C(id).aJP && joiners.length<5){
+    if(used.has(id)) continue;
+    if(C(id).aJP && players.length + joiners.length < 5){
       joiners.push({ctrlId:id, ci:joiners.length%5, ready:false, fresh:true});
       sfx('coin');
     }
   }
+}
+function updSelect(dt){
+  scanForJoiners();
   // navigera
   for(const j of joiners){
     const c = C(j.ctrlId);
@@ -1859,7 +1898,26 @@ function drawHUD(){
       ctx.fillStyle = p.color;
       ctx.fillRect(mx+p.x/TS*msc-1.5, my+p.y/TS*msc-1.5, 3, 3);
     });
+    if(NET.open){
+      ctx.font='bold 11px monospace'; ctx.textAlign='right';
+      ctx.fillStyle='#8fe89a';
+      ctx.fillText('Mobil-kod: '+NET.code.toUpperCase(), VW-10, my+mmh+18);
+      ctx.textAlign='left';
+    }
   }
+  // drop-in-väljare för nya spelare mitt i spelet
+  joiners.forEach((j,k)=>{
+    const cls = CLASSES[j.ci];
+    const wd = 480, x = VW/2-wd/2, y = VH-116-k*54;
+    ctx.fillStyle='rgba(13,11,22,0.88)';
+    ctx.fillRect(x, y, wd, 46);
+    ctx.strokeStyle = PCOLORS[(players.length+k)%5]; ctx.lineWidth = 2;
+    ctx.strokeRect(x+1, y+1, wd-2, 44);
+    dspr(cls.img, x+30, y+42, 2);
+    ctx.font='bold 13px monospace'; ctx.textAlign='left';
+    ctx.fillStyle='#f4f0e4';
+    ctx.fillText('< '+cls.name+' >   ATTACK = hoppa in! · SPECIAL = ångra', x+58, y+28);
+  });
   // boss-bar
   const b = bossRef();
   if(b && b.active && !b.dead && cur==='du'){
@@ -1991,7 +2049,7 @@ function drawSelect(){
   // mobilanslutning
   if(NET.open){
     ctx.font='bold 14px monospace'; ctx.fillStyle='#8fe89a';
-    ctx.fillText('Mobil: skanna QR-koden eller öppna '+location.host+location.pathname+' och skriv kod '+NET.code.toUpperCase(), VW/2, VH-62);
+    ctx.fillText('Mobil: skanna QR-koden eller öppna '+joinHost()+' och skriv kod '+NET.code.toUpperCase(), VW/2, VH-62);
   }
   // kontroller
   ctx.font='12px monospace'; ctx.fillStyle='#6a6580';
@@ -2015,14 +2073,17 @@ function startCtrl(code){
   setInterval(send, 100);
   top.textContent = 'Ansluter till rum '+code.toUpperCase()+'…';
   const peer = new Peer();
-  peer.on('open', ()=>{
+  let attempts = 0;
+  peer.on('disconnected', ()=>{ try{ peer.reconnect(); }catch(e){} });
+  const tryConnect = ()=>{
+    attempts++;
     conn = peer.connect('slemkung-'+code.toLowerCase());
-    conn.on('open', ()=>{ connected = true; top.innerHTML = '<b style="color:#8fe89a">Ansluten!</b> Tryck ATTACK för att gå med i spelet.'; });
+    conn.on('open', ()=>{ connected = true; attempts = 0; top.innerHTML = '<b style="color:#8fe89a">Ansluten!</b> Tryck ATTACK för att gå med i spelet.'; });
     conn.on('data', d=>{
       if(!d || d.t!=='you') return;
       if(d.st==='lobby') top.innerHTML = 'Ansluten till <b>'+code.toUpperCase()+'</b> — tryck ATTACK för att gå med!';
       else if(d.st==='select') top.innerHTML = '<span style="color:'+d.color+'">&#9632; Spelare '+d.n+'</span> — '+d.cls
-        + (d.ready ? ' — <b style="color:#8fe89a">REDO!</b>' : ' — styr åt sidorna för att välja, ATTACK = redo');
+        + (d.ready ? ' — <b style="color:#8fe89a">REDO!</b>' : ' — styr åt sidorna för att välja, ATTACK = redo/hoppa in');
       else {
         const hearts = '&#9829;'.repeat(Math.max(0,Math.ceil(d.hp/2))) + '&#9825;'.repeat(Math.max(0,Math.ceil((d.maxhp-d.hp)/2)));
         top.innerHTML = '<span style="color:'+d.color+'">&#9632; '+d.cls+'</span> <span style="color:#ff8a8a">'+hearts+'</span> '
@@ -2030,10 +2091,25 @@ function startCtrl(code){
              : (d.cd>=1 ? '<b style="color:#f0c33c">SPECIAL REDO</b>' : 'special laddar…'));
       }
     });
-    const lost = ()=>{ connected = false; top.innerHTML = '<b style="color:#ff6a5e">Tappade anslutningen.</b> Ladda om sidan för att ansluta igen.'; };
-    conn.on('close', lost); conn.on('error', lost);
+    conn.on('close', ()=>{
+      if(connected){ connected = false; top.innerHTML = '<b style="color:#ff6a5e">Tappade anslutningen.</b> Försöker igen…'; setTimeout(tryConnect, 2000); }
+    });
+    conn.on('error', ()=>{});
+  };
+  const retry = ()=>{
+    if(connected) return;
+    if(attempts < 6){
+      top.innerHTML = 'Hittar inte rummet <b>'+code.toUpperCase()+'</b> — försöker igen ('+attempts+'/5)…';
+      setTimeout(tryConnect, 2500);
+    } else {
+      top.innerHTML = '<b style="color:#ff6a5e">Kunde inte ansluta.</b> Kolla att koden stämmer och att spelet är igång på stora skärmen, ladda sedan om sidan.';
+    }
+  };
+  peer.on('open', tryConnect);
+  peer.on('error', err=>{
+    if(err && err.type==='peer-unavailable') retry();
+    else if(!connected && attempts>0 && err && err.type!=='disconnected') retry();
   });
-  peer.on('error', ()=>{ top.innerHTML = '<b style="color:#ff6a5e">Kunde inte ansluta.</b> Kolla koden och ladda om sidan.'; });
   // joystick
   const zone = document.getElementById('stickZone');
   const base = document.getElementById('stickBase'), knob = document.getElementById('stickKnob');
