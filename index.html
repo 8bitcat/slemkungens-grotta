@@ -5,8 +5,18 @@
   html,body{margin:0;padding:0;height:100%;background:#0d0b16;overflow:hidden;overscroll-behavior:none}
   #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0d0b16}
   #cv{image-rendering:pixelated;image-rendering:crisp-edges;background:#0d0b16;outline:none}
-  .ol{position:fixed;inset:0;background:#0d0b16;color:#f4f0e4;font-family:monospace;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;touch-action:none;-webkit-user-select:none;user-select:none;z-index:10}
-  .bigbtn{font-family:monospace;font-size:19px;font-weight:bold;background:#1c162e;color:#f0c33c;border:2px solid #f0c33c;padding:16px 24px;border-radius:10px;cursor:pointer}
+  .ol{position:fixed;inset:0;background:#0d0b16;color:#f4f0e4;font-family:monospace;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;-webkit-user-select:none;user-select:none;z-index:10}
+  #padUI{touch-action:none}
+  .bigbtn{font-family:monospace;font-size:19px;font-weight:bold;background:#1c162e;color:#f0c33c;border:2px solid #f0c33c;padding:16px 24px;border-radius:10px;cursor:pointer;touch-action:manipulation}
+  #padUI.local{background:transparent;pointer-events:none}
+  #padUI.local #padTop{display:none}
+  #padUI.local #padMain{pointer-events:none}
+  #padUI.local #stickZone,#padUI.local .abtn{pointer-events:auto}
+  #padUI.local .abtn{opacity:0.55}
+  #padUI.local #btnA{width:92px;height:92px;font-size:14px}
+  #padUI.local #btnB{width:72px;height:72px;font-size:11px}
+  #padUI.local #stickZone{width:45%}
+  #padUI.local #stickHint{color:rgba(255,255,255,0.35)}
   #codeRow{display:none;flex-direction:column;align-items:center;gap:14px}
   #codeInput{font-family:monospace;font-size:28px;text-transform:uppercase;letter-spacing:8px;width:190px;text-align:center;background:#1c162e;color:#f4f0e4;border:2px solid #3a3452;border-radius:8px;padding:10px}
   #padUI{justify-content:flex-start;gap:0}
@@ -204,6 +214,9 @@ function rawCtrl(id){
       attack:!!keys[ks.attack], special:!!keys[ks.special], start:false
     };
   }
+  if(id==='t0'){
+    return {x:TCTRL.x, y:TCTRL.y, attack:TCTRL.a, special:TCTRL.s, start:false};
+  }
   if(id[0]==='n'){
     const c = NET.ctrls[id];
     if(!c || !c.alive) return {x:0,y:0,attack:false,special:false,start:false};
@@ -227,6 +240,7 @@ function rawCtrl(id){
 }
 function pollInputs(){
   const ids = ['k0','k1', ...netCtrlIds()];
+  if(LOCALPAD) ids.push('t0');
   const gps = pads();
   for(let i=0;i<gps.length;i++) if(gps[i]) ids.push('p'+i);
   for(const id of ids){
@@ -697,7 +711,7 @@ function shadow(x,y,w){
 }
 
 // ===================== TILES =====================
-const T = {GRASS:0,TREE:1,WATER:2,PATH:3,SAND:4,ROCK:5,FLOWER:6,DFLOOR:7,DWALL:8,DOOR:9,TORCH:10,SIGN:11,GATE:12,EXIT:13};
+const T = {GRASS:0,TREE:1,WATER:2,PATH:3,SAND:4,ROCK:5,FLOWER:6,DFLOOR:7,DWALL:8,DOOR:9,TORCH:10,SIGN:11,GATE:12,EXIT:13,BUSH:14};
 const SOLID = new Set([T.TREE,T.WATER,T.ROCK,T.DWALL,T.SIGN,T.TORCH,T.GATE]);
 function tileCv(fn){
   const c = document.createElement('canvas'); c.width=16; c.height=16;
@@ -868,39 +882,19 @@ function applySheets(){
     g.drawImage(tileImgs[T.DFLOOR][0], 0, 0);
     tileImgs.gateShape(g);
     tileImgs[T.GATE] = [c]; }
-  // trädet: rund ALttP-krona 2x2 tiles — bakgrundsgräset chroma-nycklas bort, stam ritas under
+  // trädet: arkets stora lummiga krona (40x32 vid x80,y256) + ritad stam
   treeImg = (()=>{
-    const c = document.createElement('canvas'); c.width = 32; c.height = 40;
+    const c = document.createElement('canvas'); c.width = 40; c.height = 48;
     const g = c.getContext('2d');
-    // stam
-    g.fillStyle = '#3a2415'; g.fillRect(12, 24, 8, 15);
-    g.fillStyle = '#6b3f24'; g.fillRect(13, 24, 6, 15);
-    g.fillStyle = '#8a5530'; g.fillRect(14, 24, 2, 14);
-    g.fillStyle = '#4a2c18'; g.fillRect(17, 26, 1, 12);
-    g.fillStyle = '#3a2415'; g.fillRect(10, 37, 12, 3);
-    g.fillStyle = '#6b3f24'; g.fillRect(11, 37, 10, 2);
-    // krona (nycklad)
-    const k = document.createElement('canvas'); k.width = 32; k.height = 32;
-    const kg = k.getContext('2d');
-    kg.drawImage(owSheet, 0, 6*16, 32, 32, 0, 0, 32, 32);
-    const id = kg.getImageData(0, 0, 32, 32), d = id.data;
-    // samla bakgrundsfärger från de fyra hörnen (3x3 vardera)
-    const keys = [];
-    [[0,0],[29,0],[0,29],[29,29]].forEach(([cx,cy])=>{
-      for(let dy=0;dy<3;dy++) for(let dx=0;dx<3;dx++){
-        const i = ((cy+dy)*32+(cx+dx))*4;
-        keys.push([d[i], d[i+1], d[i+2]]);
-      }
-    });
-    for(let i=0;i<d.length;i+=4){
-      for(const [kr,kgc,kb] of keys){
-        if(Math.abs(d[i]-kr)<10 && Math.abs(d[i+1]-kgc)<10 && Math.abs(d[i+2]-kb)<10){ d[i+3] = 0; break; }
-      }
-    }
-    kg.putImageData(id, 0, 0);
-    g.drawImage(k, 0, 0);
+    g.fillStyle = '#3a2415'; g.fillRect(15, 30, 10, 17);
+    g.fillStyle = '#6b3f24'; g.fillRect(16, 30, 8, 17);
+    g.fillStyle = '#8a5530'; g.fillRect(18, 30, 3, 16);
+    g.fillStyle = '#4a2c18'; g.fillRect(22, 32, 1, 14);
+    g.fillStyle = '#3a2415'; g.fillRect(13, 45, 14, 3);
+    g.drawImage(owSheet, 80, 256, 40, 32, 0, 0, 40, 32);
     return c;
   })();
+  treeImg.tscale = 1.5;
   buildEdges(tileImgs[T.GRASS][0]);
 }
 if(SHEET_OW_B64.length > 100){
@@ -971,10 +965,11 @@ function applyActorSheets(){
   OBJ.coins = [0,1,2,3].map(i=>frameOf(objSheet, i*16, 4*16, 16, 16));
   OBJ.flames = [0,1,2,3,4,5].map(i=>frameOf(objSheet, (4+i)*16, 3*16, 16, 16));
   OBJ.sparks = [0,1,2,3].map(i=>frameOf(objSheet, (10+i)*16, 3*16, 16, 16));
-  // fiender
-  ENS.flower = [0,1,2,3,4,5,6,7].map(i=>frameOf(objSheet, i*16, 10*16, 16, 32));
-  ENS.ball = [0,1,2].map(i=>frameOf(objSheet, (6+i)*16, 12*16, 16, 32));
-  ENS.log = LOG_ROWS.map(row=>[0,1,2,3].map(i=>frameOf(logSheet, i*16, row, 16, 32)));
+  // fiender — frames är 32 px breda (uppmätt via alfakanalen)
+  ENS.flower = [0,1,2,3,4,5,6,7].map(i=>frameOf(objSheet, i*32, 160, 32, 32));
+  ENS.ball = [0,1,2].map(i=>frameOf(objSheet, 128+i*32, 192, 32, 32));
+  ENS.log = LOG_ROWS.map(row=>[0,1,2,3].map(i=>frameOf(logSheet, i*32, row, 32, 32)));
+  OBJ.bush = frameOf(objSheet, 80, 32, 16, 16);
   HERO.ready = true;
 }
 if(SHEET_CHAR_B64.length > 100){
@@ -1018,7 +1013,7 @@ function buildMini(w){
     [T.GRASS]:'#4f8c30',[T.TREE]:'#2b5a24',[T.WATER]:'#3b73d8',[T.PATH]:'#c9a05a',
     [T.SAND]:'#dcc07c',[T.ROCK]:'#8a6a4e',[T.FLOWER]:'#4f8c30',[T.DFLOOR]:'#4c4660',
     [T.DWALL]:'#211d33',[T.DOOR]:'#f0c33c',[T.TORCH]:'#211d33',[T.SIGN]:'#8a5e2c',
-    [T.GATE]:'#c8ccd8',[T.EXIT]:'#f0c33c'
+    [T.GATE]:'#c8ccd8',[T.EXIT]:'#f0c33c',[T.BUSH]:'#3f7d2a'
   };
   for(let y=0;y<w.mh;y++) for(let x=0;x<w.mw;x++){
     g.fillStyle = cols[w.t[y*w.mw+x]] || '#000';
@@ -1038,18 +1033,18 @@ function genOverworld(){
     else if(x<2||x>=mw-2||y>=mh-2) t[y*mw+x]=T.TREE;
     else if(y>=42&&y<=45 && !(x>=60&&x<=66) && !(x>=96&&x<=102)) t[y*mw+x]=T.ROCK;
   }
-  // sjö i sydväst
+  // stora sjön i sydost
   for(let y=10;y<mh;y++) for(let x=2;x<mw;x++){
-    const dx=(x-26)/13.5, dy=(y-70)/8.5;
+    const dx=(x-100)/13.5, dy=(y-72)/8.5;
     if(dx*dx+dy*dy<1 && get(x,y)===T.GRASS) set(x,y,T.WATER);
   }
   for(let y=11;y<mh-1;y++) for(let x=3;x<mw-3;x++){
     if(get(x,y)!==T.GRASS) continue;
     if([get(x,y-1),get(x,y+1),get(x-1,y),get(x+1,y)].includes(T.WATER)) set(x,y,T.SAND);
   }
-  // öknen i sydost (taggig kant)
-  for(let y=50;y<=90;y++) for(let x=96;x<mw-2;x++){
-    if(x >= 100 - ((y*7)%5) && get(x,y)===T.GRASS) set(x,y,T.SAND);
+  // öknen i sydväst (taggig kant)
+  for(let y=52;y<=90;y++) for(let x=2;x<=34;x++){
+    if(x <= 30 - ((y*7)%5) && get(x,y)===T.GRASS) set(x,y,T.SAND);
   }
   // huvudstig: spawn -> norra porten (genom västra passet i ryggen)
   for(let y=10;y<=88;y++){
@@ -1075,10 +1070,18 @@ function genOverworld(){
   for(let y=11;y<mh-2;y++) for(let x=2;x<mw-2;x++){
     if(get(x,y)!==T.GRASS) continue;
     if(dist(x,y,64,85)<8) continue;
-    const dense = (x<52 && y>13 && y<41) ? 0.16 : 0.06;
+    const dense = (x<52 && y>13 && y<41) ? 0.07 : 0.025;
     const r = rng();
     if(r<dense) set(x,y,T.TREE);
     else if(r<dense+0.05) set(x,y,T.FLOWER);
+  }
+  // klippbart högt gräs i dungar
+  for(let i=0;i<80;i++){
+    const gx = 4+((rng()*(mw-8))|0), gy = 12+((rng()*(mh-16))|0);
+    for(let k=0;k<6;k++){
+      const x = gx+((rng()*3)|0)-1, y = gy+((rng()*3)|0)-1;
+      if(x>1 && y>10 && x<mw-2 && y<mh-2 && get(x,y)===T.GRASS && dist(x,y,64,85)>6) set(x,y,T.BUSH);
+    }
   }
   // butik 1 (vid spawn): dryck, hjärta, stövlar
   w.merchants.push({x:70.5*TS, y:82.2*TS});
@@ -1093,12 +1096,12 @@ function genOverworld(){
   // skyltar
   const sign=(x,y,txt)=>{ set(x,y,T.SIGN); w.signs.push({tx:x,ty:y,txt}); };
   sign(57,81,'Välkomna, hjältar! Följ stigen norrut mot äventyret.');
-  sign(61,61,'Väst: Sjön & Fladdermusgrottan · Norr: Slemkungen');
+  sign(61,61,'Väst: Fladdermusgrottan & Öknen · Öst: Sjön · Norr: Slemkungen');
   sign(68,47,'Genom passet: Slemkungens rike · Öst: Öknen');
   sign(33,46,'Fladdermusgrottan — hör du vingslagen?');
   sign(66,12,'VARNING: Slemkungens grotta. Vänd om... eller bli legender!');
   sign(104,13,'Kristallgrottan — glittrar det där inne?');
-  sign(97,52,'Öknen — här härskar de blå slemmen.');
+  sign(36,50,'Öknen — här härskar blomstermonstren.');
   // fiender per region
   const place = (type,n,xmin,xmax,ymin,ymax)=>{
     let placed=0, guard=0;
@@ -1113,10 +1116,10 @@ function genOverworld(){
   place('slime',8,4,124,12,40);
   place('bat',12,4,52,14,40);
   place('skel',10,52,124,12,40);
-  place('bslime',8,98,124,50,88);
+  place('bslime',8,4,30,54,88);
   place('bslime',2,58,70,13,20);
   // hjärtan utspridda i världen
-  [[20,60],[90,20],[120,60],[40,20],[110,85]].forEach(([x,y])=>{
+  [[20,60],[90,20],[118,40],[40,20],[86,60]].forEach(([x,y])=>{
     if(!SOLID.has(get(x,y))) w.pickups.push({kind:'heart',x:(x+0.5)*TS,y:(y+0.5)*TS,vx:0,vy:0,t:0});
   });
   buildMini(w);
@@ -1216,6 +1219,7 @@ function toast(msg){ toastMsg = msg; toastT = 2; }
 function ctrlLabel(id){
   if(id==='k0') return 'Tangentbord 1';
   if(id==='k1') return 'Tangentbord 2';
+  if(id==='t0') return 'Pekskärm';
   if(id[0]==='n') return 'Mobil';
   return 'Handkontroll '+(+id.slice(1)+1);
 }
@@ -1268,6 +1272,24 @@ function burst(x,y,col,n,spd){
   }
 }
 function ftext(x,y,txt,col){ texts.push({x,y,txt,col,ttl:0.9}); }
+
+// klippbart högt gräs — hugg bort det och hitta ibland mynt/hjärtan
+function cutGrass(w, px, py, r){
+  const tx0 = Math.floor((px-r)/TS), tx1 = Math.floor((px+r)/TS);
+  const ty0 = Math.floor((py-r)/TS), ty1 = Math.floor((py+r)/TS);
+  let cut = 0;
+  for(let ty=ty0; ty<=ty1; ty++) for(let tx=tx0; tx<=tx1; tx++){
+    if(tileAt(w,tx,ty)!==T.BUSH) continue;
+    if(dist(px,py,(tx+0.5)*TS,(ty+0.5)*TS) > r+12) continue;
+    setTile(w, tx, ty, T.GRASS);
+    burst((tx+0.5)*TS, (ty+0.5)*TS, '#4fae3f', 8, 90);
+    const roll = Math.random();
+    if(roll<0.08) w.pickups.push({kind:'coin', x:(tx+0.5)*TS, y:(ty+0.5)*TS, vx:0, vy:0, t:0});
+    else if(roll<0.12) w.pickups.push({kind:'heart', x:(tx+0.5)*TS, y:(ty+0.5)*TS, vx:0, vy:0, t:0});
+    cut++;
+  }
+  if(cut) sfx('swing');
+}
 
 function damageEnemy(e, dmg, sx, sy, byPlayer){
   if(e.hp<=0) return;
@@ -1339,6 +1361,7 @@ function heroAttack(p){
         damageEnemy(e, dmg, p.x, p.y, p);
       }
     }
+    cutGrass(CW(), p.x+p.fx*26, p.y+p.fy*26, 26);
   } else if(c.id==='wizard'){
     sfx('fire');
     p.swingT = p.swingDur = 0.22; p.swingAng = ang; p.spin = false;
@@ -1364,6 +1387,7 @@ function heroSpecial(p){
       if(e.hp>0 && dist(p.x,p.y,e.x,e.y) < 52+e.r) damageEnemy(e, 5+p.up.dmg, p.x, p.y, p);
     }
     burst(p.x, p.y-8, '#c0ccdc', 14, 130);
+    cutGrass(CW(), p.x, p.y, 54);
   } else if(c.id==='wizard'){
     sfx('freeze');
     for(const e of CW().enemies){
@@ -1422,6 +1446,7 @@ function updPlayer(p, dt){
       }
     }
     parts.push({x:p.x,y:p.y-10,vx:0,vy:0,ttl:0.25,max:0.25,col:'#8a8aa8',sz:6});
+    cutGrass(CW(), p.x, p.y, 20);
     return;
   }
   let dx = c.x, dy = c.y;
@@ -1644,6 +1669,7 @@ function explode(s, hitE){
   burst(s.x, s.y, '#ff9c3f', 16, 140);
   burst(s.x, s.y, '#ffd24f', 10, 100);
   cam.shake = Math.max(cam.shake, 2);
+  cutGrass(CW(), s.x, s.y, 46);
   for(const e of CW().enemies){
     if(e.hp<=0) continue;
     const d = dist(s.x,s.y,e.x,e.y);
@@ -1760,6 +1786,7 @@ function update(dt){
 function scanForJoiners(){
   const used = new Set([...joiners.map(j=>j.ctrlId), ...players.map(p=>p.ctrlId)]);
   const candidates = ['k0','k1', ...netCtrlIds()];
+  if(LOCALPAD) candidates.push('t0');
   const gps = pads();
   for(let i=0;i<gps.length;i++) if(gps[i]) candidates.push('p'+i);
   for(const id of candidates){
@@ -1818,6 +1845,7 @@ function draw(){
       if(t===T.GRASS) img = tileImgs[T.GRASS][(tx*7+ty*13)%tileImgs[T.GRASS].length];
       else if(t===T.TREE){ img = tileImgs[T.GRASS][(tx*7+ty*13)%tileImgs[T.GRASS].length]; treesVis.push([tx,ty]); }
       else if(t===T.WATER) img = tileImgs[T.WATER][wf];
+      else if(t===T.BUSH) img = tileImgs[T.GRASS][(tx*7+ty*13)%tileImgs[T.GRASS].length];
       else if(t===T.PATH) img = tileImgs[T.PATH][(tx*7+ty*13)%tileImgs[T.PATH].length];
       else if(t===T.ROCK){
         const b1 = tileAt(w,tx,ty+1);
@@ -1843,6 +1871,15 @@ function draw(){
           if(nb!==T.WATER) ctx.drawImage(edgeImgs.foam[d], tx*TS-ox, ty*TS-oy, TS, TS);
         }
       }
+      if(t===T.BUSH){
+        if(HERO.ready) ctx.drawImage(OBJ.bush, tx*TS-ox, ty*TS-oy, TS, TS);
+        else {
+          ctx.fillStyle = '#3f8f3f';
+          ctx.fillRect(tx*TS-ox+8, ty*TS-oy+12, 4, 14);
+          ctx.fillRect(tx*TS-ox+16, ty*TS-oy+8, 4, 18);
+          ctx.fillRect(tx*TS-ox+22, ty*TS-oy+14, 4, 12);
+        }
+      }
       if(t===T.TORCH){
         if(HERO.ready){
           ctx.drawImage(OBJ.flames[Math.floor(time*10+tx*3)%6], tx*TS-ox, ty*TS-oy-8, TS, TS);
@@ -1857,10 +1894,11 @@ function draw(){
     }
   }
   // trädskuggor på marken (solen står i nordväst)
+  const trw = treeImg.tscale ? 21 : 17;
   for(const [ttx,tty] of treesVis){
     ctx.fillStyle = 'rgba(10,8,20,0.2)';
     ctx.beginPath();
-    ctx.ellipse(ttx*TS+16-ox+4, (tty+1)*TS-oy-5, 17, 6, 0, 0, Math.PI*2);
+    ctx.ellipse(ttx*TS+16-ox+4, (tty+1)*TS-oy-5, trw, trw*0.34, 0, 0, Math.PI*2);
     ctx.fill();
   }
   // plock
@@ -1889,7 +1927,7 @@ function draw(){
   for(const m of (w.merchants||[])) actors.push({y:m.y, merch:m});
   actors.sort((a,b)=>a.y-b.y);
   for(const a of actors){
-    if(a.tr) dspr(treeImg, a.tr[0]*TS+16-ox, (a.tr[1]+1)*TS-oy-1, 2);
+    if(a.tr) dspr(treeImg, a.tr[0]*TS+16-ox, (a.tr[1]+1)*TS-oy-1, treeImg.tscale||2);
     else if(a.shop) drawShop(a.shop, ox, oy);
     else if(a.merch) dspr(merchImg, a.merch.x-ox, a.merch.y-oy, 2);
     else if(a.isE) drawEnemy(a.e, ox, oy);
@@ -2058,28 +2096,29 @@ function drawEnemy(e, ox, oy){
   // ark-sprites för markfiender
   if(HERO.ready && (e.type==='slime'||e.type==='mini'||e.type==='bslime'||e.type==='skel')){
     shadow(sx, sy, e.r*0.9);
-    let fr, sc = 2;
+    let fr, sc = 1.5;
     if(e.type==='slime') fr = ENS.ball[Math.floor(time*6+e.x/13)%3];
-    else if(e.type==='mini'){ fr = ENS.ball[Math.floor(time*8+e.x/7)%3]; sc = 1.4; }
+    else if(e.type==='mini'){ fr = ENS.ball[Math.floor(time*8+e.x/7)%3]; sc = 1; }
     else if(e.type==='bslime') fr = ENS.flower[Math.floor(time*8+e.x/11)%8];
     else {
       const dir = Math.abs(e.fx)>Math.abs(e.fy) ? (e.fx>0?3:2) : (e.fy<0?1:0);
       fr = ENS.log[dir][Math.floor(time*6+e.y/17)%4];
+      sc = 1.6;
     }
-    const dw = 16*sc, dh = 32*sc;
-    ctx.drawImage(fr, Math.round(sx-dw/2), Math.round(sy-dh+6), dw, dh);
+    const dw = fr.width*sc, dh = fr.height*sc;
+    ctx.drawImage(fr, Math.round(sx-dw/2), Math.round(sy-dh+8), dw, dh);
     if(e.frozenT>0){
       ctx.fillStyle = 'rgba(140,200,255,0.4)';
-      ctx.fillRect(Math.round(sx-dw/2), Math.round(sy-dh+6), dw, dh);
+      ctx.fillRect(Math.round(sx-dw/2), Math.round(sy-dh+8), dw, dh);
     }
     if(e.flashT>0){
       ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.5;
-      ctx.drawImage(fr, Math.round(sx-dw/2), Math.round(sy-dh+6), dw, dh);
+      ctx.drawImage(fr, Math.round(sx-dw/2), Math.round(sy-dh+8), dw, dh);
       ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over';
     }
     if(e.hp<e.maxhp){
-      ctx.fillStyle='#231a30'; ctx.fillRect(sx-12, sy-dh, 24, 4);
-      ctx.fillStyle='#e04848'; ctx.fillRect(sx-11, sy-dh+1, 22*clamp(e.hp/e.maxhp,0,1), 2);
+      ctx.fillStyle='#231a30'; ctx.fillRect(sx-12, sy-dh+4, 24, 4);
+      ctx.fillStyle='#e04848'; ctx.fillRect(sx-11, sy-dh+5, 22*clamp(e.hp/e.maxhp,0,1), 2);
     }
     return;
   }
@@ -2345,7 +2384,67 @@ function drawSelect(){
 }
 
 // ===================== MOBILKONTROLL-LÄGE =====================
+// delad styrspak+knapp-bindning: skriver till st {x,y,a,s} och kallar onChange
+function bindPadControls(st, onChange){
+  const zone = document.getElementById('stickZone');
+  const base = document.getElementById('stickBase'), knob = document.getElementById('stickKnob');
+  const hint = document.getElementById('stickHint');
+  let sid = null, ox = 0, oy = 0;
+  const place = (el,x,y,sz)=>{ el.style.left = (x-sz/2)+'px'; el.style.top = (y-sz/2)+'px'; };
+  zone.addEventListener('pointerdown', e=>{
+    if(sid!==null) return;
+    sid = e.pointerId;
+    try{ zone.setPointerCapture(sid); }catch(err){}
+    const r = zone.getBoundingClientRect();
+    ox = e.clientX-r.left; oy = e.clientY-r.top;
+    hint.style.display = 'none';
+    base.style.display = 'block'; knob.style.display = 'block';
+    place(base,ox,oy,120); place(knob,ox,oy,56);
+  });
+  zone.addEventListener('pointermove', e=>{
+    if(e.pointerId!==sid) return;
+    const r = zone.getBoundingClientRect();
+    let dx = e.clientX-r.left-ox, dy = e.clientY-r.top-oy;
+    const d = Math.hypot(dx,dy), max = 56;
+    if(d>max){ dx = dx/d*max; dy = dy/d*max; }
+    place(knob, ox+dx, oy+dy, 56);
+    const nx = dx/max, ny = dy/max;
+    st.x = Math.abs(nx)<0.25?0:nx; st.y = Math.abs(ny)<0.25?0:ny;
+    onChange();
+  });
+  const endStick = e=>{
+    if(e.pointerId!==sid) return;
+    sid = null; st.x = 0; st.y = 0;
+    base.style.display = 'none'; knob.style.display = 'none';
+    onChange();
+  };
+  zone.addEventListener('pointerup', endStick);
+  zone.addEventListener('pointercancel', endStick);
+  const bindBtn = (el, key)=>{
+    el.addEventListener('pointerdown', e=>{ e.preventDefault(); st[key] = true; el.classList.add('on'); onChange(); });
+    const off = ()=>{ st[key] = false; el.classList.remove('on'); onChange(); };
+    el.addEventListener('pointerup', off);
+    el.addEventListener('pointercancel', off);
+    el.addEventListener('pointerleave', off);
+  };
+  bindBtn(document.getElementById('btnA'), 'a');
+  bindBtn(document.getElementById('btnB'), 's');
+  document.addEventListener('touchmove', e=>e.preventDefault(), {passive:false});
+  document.addEventListener('gesturestart', e=>e.preventDefault());
+}
+// lokal touchkontroll: spela direkt på mobilen/surfplattan som värd
+let LOCALPAD = false;
+const TCTRL = {x:0, y:0, a:false, s:false};
+function enableLocalPad(){
+  if(LOCALPAD || MODE==='ctrl') return;
+  LOCALPAD = true;
+  const padUI = document.getElementById('padUI');
+  padUI.classList.add('local');
+  padUI.style.display = 'flex';
+  bindPadControls(TCTRL, ()=>{});
+}
 function startCtrl(code){
+  if(MODE==='ctrl') return;
   MODE = 'ctrl';
   document.getElementById('wrap').style.display = 'none';
   document.getElementById('chooseUI').style.display = 'none';
@@ -2462,6 +2561,13 @@ window.__DBG = ()=>({state, cur, coins, joiners:joiners.length, players:players.
   px:players[0]?Math.round(players[0].x):null, py:players[0]?Math.round(players[0].y):null,
   up:players[0]?players[0].up:null, hp:players[0]?players[0].hp:null, maxhp:players[0]?players[0].maxhp:null});
 window.__GIVE = n=>{ coins += n; };
+window.__TILE = (tx,ty)=>tileAt(CW(), tx, ty);
+window.__FINDBUSH = ()=>{
+  const w = CW();
+  for(let ty=12;ty<w.mh-2;ty++) for(let tx=2;tx<w.mw-2;tx++)
+    if(w.t[ty*w.mw+tx]===T.BUSH && !SOLID.has(w.t[(ty+1)*w.mw+tx])) return [tx,ty];
+  return null;
+};
 window.__SHOTS = ()=>shots.map(s=>({k:s.kind, x:Math.round(s.x), y:Math.round(s.y), vx:Math.round(s.vx), vy:Math.round(s.vy)}));
 window.__TP = (tx,ty)=>{ players.forEach((p,i)=>{ p.x=(tx+i*0.8)*TS; p.y=ty*TS; }); camSnap = true; };
 if(MODE==='ctrl'){
@@ -2469,7 +2575,14 @@ if(MODE==='ctrl'){
 } else if(MODE==='choose'){
   const chooseUI = document.getElementById('chooseUI');
   chooseUI.style.display = 'flex';
-  document.getElementById('chJoin').addEventListener('click', ()=>{
+  // pointerup + click med dubbelskydd — iOS kan svälja rena click-händelser
+  const onTap = (el, fn)=>{
+    let last = 0;
+    const h = e=>{ const now = performance.now(); if(now-last<400) return; last = now; fn(e); };
+    el.addEventListener('pointerup', h);
+    el.addEventListener('click', h);
+  };
+  onTap(document.getElementById('chJoin'), ()=>{
     document.getElementById('chJoin').style.display = 'none';
     document.getElementById('codeRow').style.display = 'flex';
     document.getElementById('codeInput').focus();
@@ -2478,16 +2591,20 @@ if(MODE==='ctrl'){
     const code = document.getElementById('codeInput').value.trim();
     if(code.length===4) startCtrl(code);
   };
-  document.getElementById('chGo').addEventListener('click', go);
+  onTap(document.getElementById('chGo'), go);
   document.getElementById('codeInput').addEventListener('keydown', e=>{ if(e.key==='Enter') go(); });
-  document.getElementById('chHost').addEventListener('click', ()=>{
+  let hostStarted = false;
+  onTap(document.getElementById('chHost'), ()=>{
+    if(hostStarted) return; hostStarted = true;
     chooseUI.style.display = 'none';
     startHost();
+    if(IS_TOUCH) enableLocalPad();
     lastT = performance.now();
     requestAnimationFrame(frame);
   });
 } else {
   startHost();
+  if(IS_TOUCH && Math.min(window.innerWidth, window.innerHeight) < 900) enableLocalPad();
   requestAnimationFrame(frame);
 }
 </script>
