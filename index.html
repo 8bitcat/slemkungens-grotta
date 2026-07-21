@@ -1221,12 +1221,11 @@ function updPlayer(p, dt){
     const ny = clamp(p.y, cam.y+26, cam.y+VH-10);
     if((nx!==p.x || ny!==p.y) && boxFree(CW(), nx, ny, p.r)){ p.x = nx; p.y = ny; }
   }
-  if(c.aJP && p.cdA<=0){
-    const w0 = CW();
-    const ped = (w0.shops||[]).filter(s=>dist(p.x,p.y,s.x,s.y)<36)
-      .sort((a,b)=>dist(p.x,p.y,a.x,a.y)-dist(p.x,p.y,b.x,b.y))[0];
-    if(ped) buyItem(p, ped); else heroAttack(p);
-  }
+  // attack auto-repeterar när knappen hålls inne; köp kräver ett nytt tryck
+  const nearPed = (CW().shops||[]).filter(s=>dist(p.x,p.y,s.x,s.y)<36)
+    .sort((a,b)=>dist(p.x,p.y,a.x,a.y)-dist(p.x,p.y,b.x,b.y))[0];
+  if(c.aJP && nearPed) buyItem(p, nearPed);
+  else if(c.attack && p.cdA<=0 && !nearPed) heroAttack(p);
   if(c.sJP && p.cdS<=0) heroSpecial(p);
 
   // dörrar (radie-check så ingen med sidooffset missar öppningen)
@@ -2100,6 +2099,7 @@ window.__DBG = ()=>({state, cur, coins, joiners:joiners.length, players:players.
   px:players[0]?Math.round(players[0].x):null, py:players[0]?Math.round(players[0].y):null,
   up:players[0]?players[0].up:null, hp:players[0]?players[0].hp:null, maxhp:players[0]?players[0].maxhp:null});
 window.__GIVE = n=>{ coins += n; };
+window.__SHOTS = ()=>shots.map(s=>({k:s.kind, x:Math.round(s.x), y:Math.round(s.y), vx:Math.round(s.vx), vy:Math.round(s.vy)}));
 window.__TP = (tx,ty)=>{ players.forEach((p,i)=>{ p.x=(tx+i*0.8)*TS; p.y=ty*TS; }); camSnap = true; };
 if(MODE==='ctrl'){
   startCtrl(URLQ.get('room'));
