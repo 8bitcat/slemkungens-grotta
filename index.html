@@ -110,7 +110,12 @@ function startHost(){
         conn.on('data', d=>{
           if(d && d.t==='i' && NET.ctrls[id]){
             const s = NET.ctrls[id].state;
-            s.x = +d.x||0; s.y = +d.y||0; s.attack = !!d.a; s.special = !!d.s;
+            const nx = +d.x||0, ny = +d.y||0, na = !!d.a, ns = !!d.s;
+            // latcha snabba tryck så de aldrig faller mellan två bildrutor
+            if(na && !s.attack) s.aL = true;
+            if(ns && !s.special) s.sL = true;
+            if(nx!==0 && s.x===0) s.xL = nx;
+            s.x = nx; s.y = ny; s.attack = na; s.special = ns;
           }
         });
         const drop = ()=>{ if(NET.ctrls[id] && NET.ctrls[id].conn===conn){ NET.ctrls[id].alive=false; NET.ctrls[id].state={x:0,y:0,attack:false,special:false}; } };
@@ -183,7 +188,12 @@ function rawCtrl(id){
   if(id[0]==='n'){
     const c = NET.ctrls[id];
     if(!c || !c.alive) return {x:0,y:0,attack:false,special:false,start:false};
-    return {x:c.state.x, y:c.state.y, attack:c.state.attack, special:c.state.special, start:false};
+    const st = c.state;
+    let x = st.x;
+    if(x===0 && st.xL) x = st.xL;
+    const at = st.attack || !!st.aL, sp = st.special || !!st.sL;
+    st.aL = false; st.sL = false; st.xL = 0;
+    return {x, y:st.y, attack:at, special:sp, start:false};
   }
   const gp = pads()[+id.slice(1)];
   if(!gp) return {x:0,y:0,attack:false,special:false,start:false};
