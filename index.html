@@ -137,7 +137,7 @@ function pushStatus(){
       if(ji>=0) msg = { t:'you', st:'select', n:ji+1, color:PCOLORS[ji], cls:CLASSES[joiners[ji].ci].name, ready:joiners[ji].ready };
     } else {
       const p = players.find(q=>q.ctrlId===id);
-      if(p) msg = { t:'you', st:state, n:p.id+1, color:p.color, cls:p.cls.name, hp:p.hp, maxhp:p.maxhp, cd:1-p.cdS/p.cls.spcCd, downed:p.downed };
+      if(p) msg = { t:'you', st:state, n:p.id+1, color:p.color, cls:p.cls.name, hp:p.hp, maxhp:p.maxhp, cd:1-p.cdS/pCd(p), downed:p.downed };
     }
     netSend(id, msg);
   }
@@ -367,10 +367,28 @@ const HEALROWS = [
   "..OCC..CCO..",
   "...OO..OO..."
 ];
+const KNIGHTROWS = [
+  ".....RR.....",
+  "....RRRR....",
+  "...OOOOOO...",
+  "..OHHHHHHO..",
+  ".OHhhhhhhHO.",
+  ".OHHHHHHHHO.",
+  ".OHEHHHHEHO.",
+  "..OHHHHHHO..",
+  ".OWWCCCCWWO.",
+  "OWCCCCCCCCWO",
+  "OSCCCGGCCCSO",
+  ".OCCCCCCCCO.",
+  "..ODDDDDDO..",
+  "..OBBOOBBO..",
+  "..OBB..BBO..",
+  "...OO..OO..."
+];
 const CLASSES = [
   { id:'knight', name:'Riddare', desc:['Stark närstrid med svärd.','Special: Snurrattack!'],
     hp:14, spd:96, atkCd:0.45, spcCd:5, dmg:3, color:'#3f6fd0',
-    rows:HERO14('open'), pal:{...BASEPAL,H:'#8fa0b4',h:'#c0ccdc',C:'#3f6fd0',D:'#2a4c9a'} },
+    rows:KNIGHTROWS, pal:{...BASEPAL,H:'#9aa7b8',h:'#c8d2e0',C:'#3f6fd0',D:'#2a4c9a',W:'#c8d2e0',R:'#d84040'} },
   { id:'wizard', name:'Trollkarl', desc:['Eldklot som exploderar.','Special: Frostnova!'],
     hp:8, spd:92, atkCd:0.5, spcCd:8, dmg:3, color:'#9b6df0',
     rows:WIZROWS, pal:{...BASEPAL,H:'#7b4fd0',h:'#a07ce8',C:'#5b3aa8',D:'#432a80',W:'#e8e4f0'} },
@@ -486,6 +504,129 @@ const SPR = {
   coin:   sprite(COINROWS,  BASEPAL),
   crystal:sprite(CRYSTROWS, {...BASEPAL,W:'#faf0c8'})
 };
+const SWORDROWS = [
+  "..W..",
+  ".OWO.",
+  ".OWO.",
+  ".OWO.",
+  ".OWO.",
+  ".OWO.",
+  ".OWO.",
+  ".OWO.",
+  ".OWO.",
+  ".OWO.",
+  "OGGGO",
+  ".OBO.",
+  ".OBO.",
+  ".OGO."
+];
+const swordImg = sprite(SWORDROWS, {...BASEPAL,W:'#eef2f8',O:'#3a4254',G:'#f0c33c',B:'#6b4a2f'});
+// högt träd (16x32) — kronan hänger in i rutan ovanför så man kan gå bakom
+const treeImg = (()=>{
+  const c = document.createElement('canvas'); c.width = 16; c.height = 32;
+  const g = c.getContext('2d');
+  g.fillStyle = '#4a2f1b'; g.fillRect(5,19,6,13);
+  g.fillStyle = '#6b3f24'; g.fillRect(6,19,3,13);
+  g.fillStyle = '#4a2f1b'; g.fillRect(4,30,8,2);
+  const inBlob = (x,y,grow)=>Math.hypot(x-8,(y-10)*1.06)<7.4+grow
+    || Math.hypot(x-4.6,y-14)<5+grow || Math.hypot(x-11.4,y-14)<5+grow;
+  for(let y=0;y<24;y++) for(let x=0;x<16;x++)
+    if(inBlob(x,y,0.9)){ g.fillStyle='#1e4c22'; g.fillRect(x,y,1,1); }
+  for(let y=0;y<24;y++) for(let x=0;x<16;x++){
+    if(!inBlob(x,y,0)) continue;
+    let col = '#2f7a33';
+    if(Math.hypot(x-5.5,y-8)<4.2) col = '#3f9440';
+    else if(y>16) col = '#26612a';
+    g.fillStyle = col; g.fillRect(x,y,1,1);
+  }
+  g.fillStyle = '#4fa84f';
+  [[4,5],[9,3],[12,9],[7,12],[3,11]].forEach(([x,y])=>g.fillRect(x,y,1,1));
+  return c;
+})();
+// ===================== BUTIKER & UPPGRADERINGAR =====================
+const SHOPITEMS = {
+  heart:  { price:30, name:'Hjärtbehållare' },
+  dmg:    { price:40, name:'Vässat vapen' },
+  spd:    { price:25, name:'Fartstövlar' },
+  cdr:    { price:35, name:'Kraftamulett' },
+  potion: { price:20, name:'Läkedryck' }
+};
+const PEDROWS = [
+  ".OOOOOOOOOO.",
+  "OWWWWWWWWWWO",
+  "OCCCCCCCCCCO",
+  ".OCCCCCCCCO.",
+  "..OCCCCCCO..",
+  "..OCCCCCCO..",
+  "..ODDDDDDO..",
+  ".ODDDDDDDDO.",
+  "ODDDDDDDDDDO",
+  "OOOOOOOOOOOO"
+];
+const pedImg = sprite(PEDROWS, {...BASEPAL,W:'#b8b8c4',C:'#8d8d99',D:'#6f6f7d'});
+const merchImg = sprite(HERO14('hood'), {...BASEPAL,H:'#6b4520',h:'#7d5228',C:'#8a5e2c',D:'#6b4520'});
+const ICONS = {
+  heart: SPR.heart,
+  dmg: swordImg,
+  spd: sprite([
+    "...OOO..",
+    "..OBBO..",
+    "..OBBO..",
+    "..OBBO..",
+    ".OBBBOO.",
+    "OBBBBBBO",
+    "OOOOOOOO"
+  ], {...BASEPAL,B:'#8a5e2c'}),
+  cdr: sprite([
+    "...GG...",
+    "..GGG...",
+    ".GGGGG..",
+    "...GG...",
+    "..GG....",
+    ".GG.....",
+    ".G......"
+  ], BASEPAL),
+  potion: sprite([
+    "...OO...",
+    "..OBBO..",
+    "..OWWO..",
+    ".OWRRWO.",
+    "OWRRRRWO",
+    "OWRRRRWO",
+    ".OWRRWO.",
+    "..OOOO.."
+  ], {...BASEPAL,R:'#e04848',W:'#cfe0ef',B:'#6b4a2f'})
+};
+function drawShop(s, ox, oy){
+  const sx = s.x-ox, sy = s.y-oy;
+  shadow(sx, sy, 11);
+  dspr(pedImg, sx, sy+2, 2);
+  const bob = Math.sin(time*3+s.x)*2;
+  dspr(ICONS[s.kind], sx, sy-20+bob, 2);
+  const it = SHOPITEMS[s.kind];
+  ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+  ctx.fillStyle = '#231a30'; ctx.fillText(it.price, sx+1, sy+15);
+  ctx.fillStyle = coins>=it.price ? '#f0c33c' : '#ff8a8a';
+  ctx.fillText(it.price, sx, sy+14);
+}
+function buyItem(p, s){
+  const it = SHOPITEMS[s.kind];
+  p.cdA = 0.35;
+  if(coins < it.price){ ftext(p.x, p.y-34, 'Behöver '+it.price+' mynt!', '#ff8a8a'); sfx('hit'); return; }
+  coins -= it.price;
+  sfx('revive');
+  burst(s.x, s.y-16, '#f0c33c', 14, 110);
+  if(s.kind==='heart'){ p.up.hp++; p.maxhp = p.cls.hp + p.up.hp*2; p.hp = p.maxhp; ftext(p.x, p.y-34, '+1 HJÄRTA!', '#ff8a8a'); }
+  else if(s.kind==='dmg'){ p.up.dmg++; ftext(p.x, p.y-34, 'Vapen +1!', '#c8d2e0'); }
+  else if(s.kind==='spd'){ p.up.spd++; ftext(p.x, p.y-34, 'Snabbare!', '#8fe89a'); }
+  else if(s.kind==='cdr'){ p.up.cdr++; ftext(p.x, p.y-34, 'Special laddar fortare!', '#f0c33c'); }
+  else if(s.kind==='potion'){
+    players.forEach(q=>{ q.downed = false; q.hp = q.maxhp; });
+    ftext(p.x, p.y-34, 'Hela laget helat!', '#8fe89a');
+  }
+}
+function pSpd(p){ return p.cls.spd * (1 + 0.12*p.up.spd); }
+function pCd(p){ return p.cls.spcCd * Math.pow(0.8, p.up.cdr); }
 function dspr(img,cx,feetY,sc,flip,alpha){
   sc = sc||2;
   ctx.save();
@@ -496,8 +637,10 @@ function dspr(img,cx,feetY,sc,flip,alpha){
   ctx.restore();
 }
 function shadow(x,y,w){
-  ctx.fillStyle = 'rgba(10,8,20,0.3)';
-  ctx.beginPath(); ctx.ellipse(x, y+2, w, w*0.4, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = 'rgba(10,8,20,0.16)';
+  ctx.beginPath(); ctx.ellipse(x+1, y+2, w*1.3, w*0.5, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = 'rgba(10,8,20,0.24)';
+  ctx.beginPath(); ctx.ellipse(x+1, y+2, w*0.85, w*0.34, 0, 0, Math.PI*2); ctx.fill();
 }
 
 // ===================== TILES =====================
@@ -560,8 +703,25 @@ const tileImgs = {};
     g.fillRect(4,6,8,10); g.fillRect(5,4,6,2); g.fillRect(6,3,4,1);
     g.fillStyle='#a8a8b5'; g.fillRect(3,2,2,2); g.fillRect(11,2,2,2);
   })];
+  // klippfront: ljus ovansida + mörk brant framsida (ALttP-djup)
+  tileImgs.rockFace = tileCv(g=>{
+    g.fillStyle='#a8a8b5'; g.fillRect(0,0,16,4);
+    g.fillStyle='#8d8d99'; g.fillRect(0,3,16,1);
+    g.fillStyle='#6f6f7d'; g.fillRect(0,4,16,12);
+    g.fillStyle='#7d7d8b'; g.fillRect(1,5,3,9); g.fillRect(7,4,4,11); g.fillRect(13,6,2,8);
+    g.fillStyle='#5a5a68'; g.fillRect(4,4,1,12); g.fillRect(11,4,1,12); g.fillRect(0,15,16,1);
+    g.fillStyle='#525260'; g.fillRect(6,9,1,7); g.fillRect(14,11,1,5);
+  });
+  tileImgs.wallFace = tileCv(g=>{
+    g.fillStyle='#3c3656'; g.fillRect(0,0,16,3);
+    g.fillStyle='#2a2540'; g.fillRect(0,2,16,1);
+    g.fillStyle='#232036'; g.fillRect(0,3,16,13);
+    g.fillStyle='#2e2947';
+    g.fillRect(1,4,6,3); g.fillRect(9,4,6,3); g.fillRect(1,9,3,3); g.fillRect(6,9,6,3); g.fillRect(14,9,1,3);
+    g.fillStyle='#191624'; g.fillRect(0,15,16,1); g.fillRect(0,7,16,1); g.fillRect(0,12,16,1);
+  });
   tileImgs[T.TORCH] = [tileCv(g=>{
-    g.drawImage(tileImgs[T.DWALL][0],0,0);
+    g.drawImage(tileImgs.wallFace,0,0);
     g.fillStyle='#6b3f24'; g.fillRect(7,9,2,5);
     g.fillStyle='#8a5530'; g.fillRect(6,8,4,2);
   })];
@@ -736,7 +896,8 @@ function startGame(){
       x:(30+i*1.2)*TS+(i%2)*14, y:42.5*TS,
       fx:0, fy:-1, hp:cls.hp, maxhp:cls.hp, r:9,
       cdA:0, cdS:0, swingT:0, dashT:0, dashHit:null, invT:0,
-      downed:false, reviveT:0, kbx:0, kby:0, walkT:0, flashT:0,
+      downed:false, reviveT:0, kbx:0, kby:0, walkT:0, flashT:0, dustT:0,
+      up:{hp:0, dmg:0, spd:0, cdr:0},
       stats:{dmg:0, heal:0, downs:0, kills:0}
     };
   });
@@ -748,7 +909,8 @@ function resetRun(){
   worlds = { ow: genOverworld(), du: genDungeon(players.length) };
   cur='ow'; shots=[]; parts=[]; texts=[]; coins=0; camSnap=true;
   players.forEach((p,i)=>{
-    p.x=(30+i*1.2)*TS+(i%2)*14; p.y=42.5*TS; p.hp=p.maxhp; p.downed=false;
+    p.x=(30+i*1.2)*TS+(i%2)*14; p.y=42.5*TS;
+    p.maxhp = p.cls.hp + p.up.hp*2; p.hp = p.maxhp; p.downed=false;
     p.cdA=0; p.cdS=0; p.invT=0; p.dashT=0; p.reviveT=0; p.kbx=0; p.kby=0;
     p.stats={dmg:0,heal:0,downs:0,kills:0};
   });
@@ -817,39 +979,42 @@ function heroAttack(p){
   const c = p.cls, ang = Math.atan2(p.fy, p.fx);
   p.cdA = c.atkCd;
   if(c.id==='knight' || c.id==='rogue'){
-    p.swingT = 0.18;
+    p.swingT = p.swingDur = c.id==='knight'?0.2:0.15;
+    p.swingAng = ang; p.swingArc = c.id==='knight'?2.4:1.7; p.spin = false;
     sfx('swing');
     const range = c.id==='knight'?42:32, arc = c.id==='knight'?1.15:0.85;
     for(const e of CW().enemies){
       if(e.hp<=0) continue;
       const d = dist(p.x,p.y,e.x,e.y);
       if(d < range+e.r && Math.abs(angDiff(ang, Math.atan2(e.y-p.y,e.x-p.x))) < arc){
-        let dmg = c.dmg;
+        let dmg = c.dmg + p.up.dmg;
         if(c.id==='rogue'){
           const el = Math.hypot(e.fx,e.fy)||1;
-          if((p.fx*e.fx+p.fy*e.fy)/el > 0.3){ dmg = 5; ftext(p.x,p.y-34,'SMYG!','#c0e8ff'); }
+          if((p.fx*e.fx+p.fy*e.fy)/el > 0.3){ dmg = 5 + p.up.dmg; ftext(p.x,p.y-34,'SMYG!','#c0e8ff'); }
         }
         damageEnemy(e, dmg, p.x, p.y, p);
       }
     }
   } else if(c.id==='wizard'){
     sfx('fire');
-    shots.push({x:p.x+p.fx*12, y:p.y-10+p.fy*12, vx:p.fx*240, vy:p.fy*240, dmg:3, kind:'fire', from:'p', owner:p, ttl:1.4, r:7});
+    shots.push({x:p.x+p.fx*12, y:p.y-10+p.fy*12, vx:p.fx*240, vy:p.fy*240, dmg:3+p.up.dmg, kind:'fire', from:'p', owner:p, ttl:1.4, r:7});
   } else if(c.id==='hunter'){
     sfx('arrow');
-    shots.push({x:p.x+p.fx*12, y:p.y-10+p.fy*12, vx:p.fx*340, vy:p.fy*340, dmg:2, kind:'arrow', from:'p', owner:p, ttl:1.1, r:4});
+    shots.push({x:p.x+p.fx*12, y:p.y-10+p.fy*12, vx:p.fx*340, vy:p.fy*340, dmg:2+p.up.dmg, kind:'arrow', from:'p', owner:p, ttl:1.1, r:4});
   } else if(c.id==='healer'){
     sfx('bolt');
-    shots.push({x:p.x+p.fx*12, y:p.y-10+p.fy*12, vx:p.fx*300, vy:p.fy*300, dmg:2, kind:'bolt', from:'p', owner:p, ttl:1.0, r:5, healed:new Set()});
+    shots.push({x:p.x+p.fx*12, y:p.y-10+p.fy*12, vx:p.fx*300, vy:p.fy*300, dmg:2+p.up.dmg, kind:'bolt', from:'p', owner:p, ttl:1.0, r:5, healed:new Set()});
   }
 }
 function heroSpecial(p){
   const c = p.cls;
-  p.cdS = c.spcCd;
+  p.cdS = pCd(p);
   if(c.id==='knight'){
-    sfx('spin'); p.swingT = 0.3; p.spinT = 0.3;
+    sfx('spin');
+    p.swingT = p.swingDur = 0.38;
+    p.swingAng = Math.atan2(p.fy,p.fx); p.swingArc = Math.PI*2; p.spin = true;
     for(const e of CW().enemies){
-      if(e.hp>0 && dist(p.x,p.y,e.x,e.y) < 52+e.r) damageEnemy(e, 5, p.x, p.y, p);
+      if(e.hp>0 && dist(p.x,p.y,e.x,e.y) < 52+e.r) damageEnemy(e, 5+p.up.dmg, p.x, p.y, p);
     }
     burst(p.x, p.y-8, '#c0ccdc', 14, 130);
   } else if(c.id==='wizard'){
@@ -867,7 +1032,7 @@ function heroSpecial(p){
     const base = Math.atan2(p.fy, p.fx);
     for(let i=-2;i<=2;i++){
       const a = base + i*0.18;
-      shots.push({x:p.x, y:p.y-10, vx:Math.cos(a)*340, vy:Math.sin(a)*340, dmg:2, kind:'arrow', from:'p', owner:p, ttl:1.1, r:4});
+      shots.push({x:p.x, y:p.y-10, vx:Math.cos(a)*340, vy:Math.sin(a)*340, dmg:2+p.up.dmg, kind:'arrow', from:'p', owner:p, ttl:1.1, r:4});
     }
   } else if(c.id==='rogue'){
     sfx('dash');
@@ -906,7 +1071,7 @@ function updPlayer(p, dt){
     moveBox(CW(), p, p.dashX*600*dt, p.dashY*600*dt);
     for(const e of CW().enemies){
       if(e.hp>0 && !p.dashHit.has(e) && dist(p.x,p.y,e.x,e.y)<e.r+16){
-        p.dashHit.add(e); damageEnemy(e, 4, p.x-p.dashX*20, p.y-p.dashY*20, p);
+        p.dashHit.add(e); damageEnemy(e, 4+p.up.dmg, p.x-p.dashX*20, p.y-p.dashY*20, p);
       }
     }
     parts.push({x:p.x,y:p.y-10,vx:0,vy:0,ttl:0.25,max:0.25,col:'#8a8aa8',sz:6});
@@ -918,7 +1083,12 @@ function updPlayer(p, dt){
     dx/=l; dy/=l;
     p.fx = dx; p.fy = dy;
     p.walkT += dt*8;
-    moveBox(CW(), p, dx*p.cls.spd*dt, dy*p.cls.spd*dt);
+    moveBox(CW(), p, dx*pSpd(p)*dt, dy*pSpd(p)*dt);
+    p.dustT -= dt;
+    if(p.dustT<=0){
+      p.dustT = 0.24;
+      parts.push({x:p.x-dx*6, y:p.y-2, vx:-dx*20+(Math.random()-0.5)*14, vy:-8-Math.random()*10, ttl:0.3, max:0.3, col:'#c8b088', sz:2.5});
+    }
   }
   // håll ihop gruppen (kamera-koppel) — aldrig in i väggar, aldrig före kamerans första snap
   if(players.length>1 && !camSnap){
@@ -926,7 +1096,12 @@ function updPlayer(p, dt){
     const ny = clamp(p.y, cam.y+26, cam.y+VH-10);
     if((nx!==p.x || ny!==p.y) && boxFree(CW(), nx, ny, p.r)){ p.x = nx; p.y = ny; }
   }
-  if(c.aJP && p.cdA<=0) heroAttack(p);
+  if(c.aJP && p.cdA<=0){
+    const w0 = CW();
+    const ped = (w0.shops||[]).filter(s=>dist(p.x,p.y,s.x,s.y)<36)
+      .sort((a,b)=>dist(p.x,p.y,a.x,a.y)-dist(p.x,p.y,b.x,b.y))[0];
+    if(ped) buyItem(p, ped); else heroAttack(p);
+  }
   if(c.sJP && p.cdS<=0) heroSpecial(p);
 
   // dörrar
@@ -1222,13 +1397,14 @@ function updSelect(dt){
   for(const id of candidates){
     if(usedIds.has(id)) continue;
     if(C(id).aJP && joiners.length<5){
-      joiners.push({ctrlId:id, ci:joiners.length%5, ready:false});
+      joiners.push({ctrlId:id, ci:joiners.length%5, ready:false, fresh:true});
       sfx('coin');
     }
   }
   // navigera
   for(const j of joiners){
     const c = C(j.ctrlId);
+    if(j.fresh){ j.fresh = false; continue; } // join-trycket får inte också betyda "redo"
     if(!j.ready){
       if(c.lJP){ j.ci=(j.ci+4)%5; sfx('bolt'); }
       if(c.rJP){ j.ci=(j.ci+1)%5; sfx('bolt'); }
@@ -1263,12 +1439,19 @@ function draw(){
   const x0 = Math.floor(ox/TS), y0 = Math.floor(oy/TS);
   const x1 = x0 + Math.ceil(VW/TS)+1, y1 = y0 + Math.ceil(VH/TS)+1;
   const wf = (time*2|0)%2;
+  const treesVis = [];
   for(let ty=y0; ty<=y1; ty++){
     for(let tx=x0; tx<=x1; tx++){
       const t = tileAt(w, tx, ty);
       let img;
       if(t===T.GRASS) img = tileImgs[T.GRASS][(tx*7+ty*13)%2];
+      else if(t===T.TREE){ img = tileImgs[T.GRASS][(tx*7+ty*13)%2]; treesVis.push([tx,ty]); }
       else if(t===T.WATER) img = tileImgs[T.WATER][wf];
+      else if(t===T.ROCK) img = tileAt(w,tx,ty+1)===T.ROCK ? tileImgs[T.ROCK][0] : tileImgs.rockFace;
+      else if(t===T.DWALL){
+        const b = tileAt(w,tx,ty+1);
+        img = (b===T.DFLOOR||b===T.GATE||b===T.EXIT) ? tileImgs.wallFace : tileImgs[T.DWALL][0];
+      }
       else img = (tileImgs[t]||tileImgs[T.GRASS])[0];
       ctx.drawImage(img, tx*TS-ox, ty*TS-oy, TS, TS);
       if(t===T.TORCH){
@@ -1279,6 +1462,13 @@ function draw(){
         ctx.beginPath(); ctx.arc(tx*TS-ox+16, ty*TS-oy+14, fl*0.5, 0, Math.PI*2); ctx.fill();
       }
     }
+  }
+  // trädskuggor på marken (solen står i nordväst)
+  for(const [ttx,tty] of treesVis){
+    ctx.fillStyle = 'rgba(10,8,20,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(ttx*TS+16-ox+4, (tty+1)*TS-oy-5, 17, 6, 0, 0, Math.PI*2);
+    ctx.fill();
   }
   // plock
   for(const pk of w.pickups){
@@ -1291,13 +1481,19 @@ function draw(){
       dspr(SPR.crystal, pk.x-ox, pk.y-oy+bob, 2);
     }
   }
-  // aktörer sorterade i y-led
+  // aktörer sorterade i y-led — träd, butiker och handlare deltar så man kan gå bakom dem
   const actors = [];
   for(const e of w.enemies) if(e.hp>0||e.type==='boss') actors.push({y:e.y, e, isE:true});
   for(const p of players) actors.push({y:p.y, p});
+  for(const [ttx,tty] of treesVis) actors.push({y:(tty+1)*TS-2, tr:[ttx,tty]});
+  for(const s of (w.shops||[])) actors.push({y:s.y+8, shop:s});
+  for(const m of (w.merchants||[])) actors.push({y:m.y, merch:m});
   actors.sort((a,b)=>a.y-b.y);
   for(const a of actors){
-    if(a.isE) drawEnemy(a.e, ox, oy);
+    if(a.tr) dspr(treeImg, a.tr[0]*TS+16-ox, (a.tr[1]+1)*TS-oy-1, 2);
+    else if(a.shop) drawShop(a.shop, ox, oy);
+    else if(a.merch) dspr(merchImg, a.merch.x-ox, a.merch.y-oy, 2);
+    else if(a.isE) drawEnemy(a.e, ox, oy);
     else drawPlayer(a.p, ox, oy);
   }
   // skott
@@ -1391,18 +1587,30 @@ function drawPlayer(p, ox, oy){
   let alpha = 1;
   if(p.downed) alpha = 0.45;
   else if(p.invT>0 && (time*14|0)%2) alpha = 0.35;
-  // svärdssving
-  if(p.swingT>0 && (p.cls.id==='knight'||p.cls.id==='rogue')){
-    const ang = Math.atan2(p.fy,p.fx);
-    ctx.strokeStyle = 'rgba(244,240,228,0.9)';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    if(p.spinT>0) ctx.arc(sx, sy-10, 40, 0, Math.PI*2);
-    else ctx.arc(sx, sy-10, p.cls.id==='knight'?34:26, ang-0.9, ang+0.9);
-    ctx.stroke();
-  }
-  p.spinT = Math.max(0,(p.spinT||0)-1/60);
   dspr(p.cls.img, sx, sy+bob, 2, flip, alpha);
+  // riktig svärdssving: roterande svärd med sveptrail
+  if(p.swingT>0 && (p.cls.id==='knight'||p.cls.id==='rogue')){
+    const prog = 1 - p.swingT/p.swingDur;
+    const sweep = p.swingArc;
+    const a0 = p.swingAng - (p.spin ? 0 : sweep/2);
+    const a = a0 + prog*sweep;
+    // trail som bleknar bakom bladet
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = 'rgba(244,240,228,'+(0.30*(1-prog*0.55)).toFixed(2)+')';
+    ctx.beginPath(); ctx.arc(sx, sy-10, 25, Math.max(a0, a-0.95), a); ctx.stroke();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath(); ctx.arc(sx, sy-10, 30, Math.max(a0, a-0.4), a); ctx.stroke();
+    // själva svärdet
+    ctx.save();
+    ctx.translate(sx, sy-10);
+    ctx.rotate(a + Math.PI/2);
+    ctx.translate(0, -8);
+    const wsc = p.cls.id==='knight' ? 2 : 1.5;
+    ctx.scale(wsc, wsc);
+    ctx.drawImage(swordImg, -swordImg.width/2, -swordImg.height);
+    ctx.restore();
+  }
   // spelarfärgprick
   ctx.fillStyle = p.color;
   ctx.fillRect(sx-3, sy-p.cls.img.height*2-8, 6, 4);
@@ -1491,7 +1699,7 @@ function drawHUD(){
     ctx.fillText(p.downed ? p.cls.name+' — NED!' : p.cls.name, 44, y+13);
     drawHearts(44, y+17, p.hp, p.maxhp);
     // special-laddning
-    const pct = 1 - p.cdS/p.cls.spcCd;
+    const pct = 1 - p.cdS/pCd(p);
     ctx.fillStyle='#231a30'; ctx.fillRect(150, y+6, 40, 7);
     ctx.fillStyle = pct>=1 ? '#f0c33c' : '#8a86a0';
     ctx.fillRect(151, y+7, 38*clamp(pct,0,1), 5);
@@ -1737,6 +1945,7 @@ function frame(now){
 }
 window.__NET = NET;
 window.__DBG = ()=>({state, joiners:joiners.length, players:players.length,
+  ci:joiners[0]?joiners[0].ci:null, ready:joiners[0]?joiners[0].ready:null,
   px:players[0]?Math.round(players[0].x):null, py:players[0]?Math.round(players[0].y):null});
 if(MODE==='ctrl'){
   startCtrl(URLQ.get('room'));
