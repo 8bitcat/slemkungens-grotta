@@ -215,7 +215,11 @@ function rawCtrl(id){
     };
   }
   if(id==='t0'){
-    return {x:TCTRL.x, y:TCTRL.y, attack:TCTRL.a, special:TCTRL.s, start:false};
+    let x = TCTRL.x;
+    if(x===0 && TCTRL.xL) x = TCTRL.xL;
+    const at = TCTRL.a || !!TCTRL.aL, sp = TCTRL.s || !!TCTRL.sL;
+    TCTRL.aL = false; TCTRL.sL = false; TCTRL.xL = 0;
+    return {x, y:TCTRL.y, attack:at, special:sp, start:false};
   }
   if(id[0]==='n'){
     const c = NET.ctrls[id];
@@ -2409,7 +2413,9 @@ function bindPadControls(st, onChange){
     if(d>max){ dx = dx/d*max; dy = dy/d*max; }
     place(knob, ox+dx, oy+dy, 56);
     const nx = dx/max, ny = dy/max;
-    st.x = Math.abs(nx)<0.25?0:nx; st.y = Math.abs(ny)<0.25?0:ny;
+    const newX = Math.abs(nx)<0.25?0:nx;
+    if(newX!==0 && st.x===0) st.xL = newX; // latcha snabba sidoflickar (menyval)
+    st.x = newX; st.y = Math.abs(ny)<0.25?0:ny;
     onChange();
   });
   const endStick = e=>{
@@ -2421,7 +2427,7 @@ function bindPadControls(st, onChange){
   zone.addEventListener('pointerup', endStick);
   zone.addEventListener('pointercancel', endStick);
   const bindBtn = (el, key)=>{
-    el.addEventListener('pointerdown', e=>{ e.preventDefault(); st[key] = true; el.classList.add('on'); onChange(); });
+    el.addEventListener('pointerdown', e=>{ e.preventDefault(); st[key] = true; st[key+'L'] = true; el.classList.add('on'); onChange(); });
     const off = ()=>{ st[key] = false; el.classList.remove('on'); onChange(); };
     el.addEventListener('pointerup', off);
     el.addEventListener('pointercancel', off);
