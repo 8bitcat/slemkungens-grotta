@@ -335,32 +335,66 @@ const HERO14 = hat=>[
   "...OO..OO..."
 ];
 const WIZROWS = [
-  ".....OO.....",
-  "....OHHO....",
-  "...OHHHHO...",
-  "...OhHHHO...",
+  ".......OO...",
+  "......OHHO..",
+  ".....OHHHO..",
+  "....OHHHHO..",
+  "...OGGGGGO..",
+  "..OHHWHHHO..",
   "OHHHHHHHHHHO",
   ".OSESSSSESO.",
   "..OWWWWWWO..",
-  ".OCCCCCCCCO.",
-  "OCDCCCCCCDCO",
+  ".OCWWWWWWCO.",
+  "OCDCCWWCCDCO",
   "OSCCCCCCCCSO",
   ".OCCCCCCCCO.",
-  ".OCCCCCCCCO.",
+  ".OCCGGGGCCO.",
   "..ODDDDDDO..",
   "..ODDDDDDO..",
   "...OOOOOO..."
+];
+const HUNTERROWS = [
+  "...OOOOOO...",
+  "..OHHHHHHOR.",
+  ".OHHHHHHHHOR",
+  ".OHSSSSSSHO.",
+  ".OHSESSESHO.",
+  "..OSSSSSSO..",
+  ".ODCCCCCCCO.",
+  "OCCDCCCCCCCO",
+  "OSCCDCCCCCSO",
+  ".OCCCDCCCCO.",
+  "..ODDGDDDO..",
+  "..OBBOOBBO..",
+  "..OBB..BBO..",
+  "...OO..OO..."
+];
+const ROGUEROWS = [
+  "...OOOOOO...",
+  "..OHHHHHHO..",
+  ".OHHHHHHHHO.",
+  ".OHhhhhhhHO.",
+  ".OFFEFFEFFO.",
+  "..OFFFFFFO..",
+  ".OCCCCCCCCO.",
+  "OCDCCCCCCDCO",
+  "OSCDCCCCDCSO",
+  ".OCCCCCCCCO.",
+  "..OWDDDDWO..",
+  "..OBBOOBBO..",
+  "..OBB..BBO..",
+  "...OO..OO..."
 ];
 const HEALROWS = [
   "...OOOOOO...",
   "..OHHHHHHO..",
   ".OHGGGGGGHO.",
   ".OHSSSSSSHO.",
-  ".OSSESSESO..",
+  ".OHSESSESHO.",
   "..OSSSSSSO..",
-  ".OCCCCCCCCO.",
-  "OCGCCCCCCGCO",
-  "OSCCCCCCCCSO",
+  ".OCCCGGCCCO.",
+  "OCCGGGGGGCCO",
+  "OSCCCGGCCCSO",
   ".OCCCCCCCCO.",
   ".OCCCCCCCCO.",
   "..OGGGGGGO..",
@@ -394,10 +428,10 @@ const CLASSES = [
     rows:WIZROWS, pal:{...BASEPAL,H:'#7b4fd0',h:'#a07ce8',C:'#5b3aa8',D:'#432a80',W:'#e8e4f0'} },
   { id:'hunter', name:'Jägare', desc:['Snabb pilbåge, långt håll.','Special: Pilregn x5!'],
     hp:10, spd:106, atkCd:0.3, spcCd:6, dmg:2, color:'#3f9f4f',
-    rows:HERO14('hood'), pal:{...BASEPAL,H:'#3f8f3f',h:'#4fa84f',C:'#7a5a36',D:'#5c4228'} },
+    rows:HUNTERROWS, pal:{...BASEPAL,H:'#3f8f3f',h:'#4fa84f',C:'#7a5a36',D:'#54401f',R:'#d84040',G:'#f0c33c'} },
   { id:'rogue', name:'Skugga', desc:['Snabb dolk, x2 bakifrån!','Special: Skugg-dash!'],
     hp:8, spd:118, atkCd:0.22, spcCd:3.5, dmg:2, color:'#8a8aa8',
-    rows:HERO14('hood'), pal:{...BASEPAL,H:'#3a3a4c',h:'#4a4a60',C:'#4a4a5e',D:'#33333f',S:'#e0b088',E:'#e8e8f4'} },
+    rows:ROGUEROWS, pal:{...BASEPAL,H:'#3a3a4c',h:'#2e2e3c',C:'#4a4a5e',D:'#33333f',F:'#16141f',E:'#7ae0c8',W:'#9a9ab0'} },
   { id:'healer', name:'Helare', desc:['Läker vänner med ljus.','Special: Väcker fallna!'],
     hp:10, spd:98, atkCd:0.4, spcCd:9, dmg:2, color:'#f0d898',
     rows:HEALROWS, pal:{...BASEPAL,H:'#f0ead8',h:'#f8f4e8',C:'#f4efe2',D:'#d8d0bc'} }
@@ -748,7 +782,7 @@ const tileImgs = {};
 let worlds = null, cur = 'ow';
 const CW = ()=>worlds[cur];
 function tileAt(w, tx, ty){
-  if(tx<0||ty<0||tx>=w.mw||ty>=w.mh) return T.ROCK;
+  if(tx<0||ty<0||tx>=w.mw||ty>=w.mh) return w.name==='ow' ? T.ROCK : T.DWALL;
   return w.t[ty*w.mw+tx];
 }
 function setTile(w, tx, ty, v){ if(tx>=0&&ty>=0&&tx<w.mw&&ty<w.mh) w.t[ty*w.mw+tx]=v; }
@@ -771,69 +805,159 @@ function spawnEnemy(w, type, tx, ty){
   w.enemies.push({type, x:(tx+0.5)*TS, y:(ty+0.5)*TS, hp:E.hp, maxhp:E.hp, dmg:E.dmg, r:E.r, spd:E.spd,
     fly:!!E.fly, vx:0, vy:0, st:'idle', t:Math.random()*1.2, fx:0, fy:1, frozenT:0, flashT:0, shootT:1+Math.random()*2});
 }
+function buildMini(w){
+  const c = document.createElement('canvas'); c.width = w.mw; c.height = w.mh;
+  const g = c.getContext('2d');
+  const cols = {
+    [T.GRASS]:'#4f8c30',[T.TREE]:'#2b5a24',[T.WATER]:'#3b73d8',[T.PATH]:'#c9a05a',
+    [T.SAND]:'#dcc07c',[T.ROCK]:'#77778a',[T.FLOWER]:'#4f8c30',[T.DFLOOR]:'#4c4660',
+    [T.DWALL]:'#211d33',[T.DOOR]:'#f0c33c',[T.TORCH]:'#211d33',[T.SIGN]:'#8a5e2c',
+    [T.GATE]:'#c8ccd8',[T.EXIT]:'#f0c33c'
+  };
+  for(let y=0;y<w.mh;y++) for(let x=0;x<w.mw;x++){
+    g.fillStyle = cols[w.t[y*w.mw+x]] || '#000';
+    g.fillRect(x,y,1,1);
+  }
+  w.mini = c;
+}
 function genOverworld(){
-  const mw=64, mh=48, t = new Uint8Array(mw*mh);
+  const mw=128, mh=96, t = new Uint8Array(mw*mh);
   const rng = mulberry32(1337);
-  const w = {mw, mh, t, enemies:[], pickups:[], signs:[], doors:[], name:'ow'};
-  // bergsband i norr + kanter
+  const w = {mw, mh, t, enemies:[], pickups:[], signs:[], doors:[], shops:[], merchants:[], name:'ow', dark:false};
+  const set=(x,y,v)=>{ if(x>=0&&y>=0&&x<mw&&y<mh) t[y*mw+x]=v; };
+  const get=(x,y)=>t[y*mw+x];
+  // kanter + norra bergsbandet + mittryggen (med pass)
   for(let y=0;y<mh;y++) for(let x=0;x<mw;x++){
-    if(y<8 || x<2 || x>=mw-2 || y>=mh-2) t[y*mw+x] = (y<8 ? T.ROCK : T.TREE);
+    if(y<10) t[y*mw+x]=T.ROCK;
+    else if(x<2||x>=mw-2||y>=mh-2) t[y*mw+x]=T.TREE;
+    else if(y>=42&&y<=45 && !(x>=60&&x<=66) && !(x>=96&&x<=102)) t[y*mw+x]=T.ROCK;
   }
-  // grottentré
-  for(let y=5;y<=7;y++) for(let x=31;x<=33;x++) t[y*mw+x] = T.PATH;
-  t[4*mw+32] = T.DOOR;
-  w.doors.push({tx:32,ty:4,to:'du',dx:20.5*TS,dy:31.5*TS});
-  // sjö
-  for(let y=0;y<mh;y++) for(let x=0;x<mw;x++){
-    const dx=(x-13)/8.5, dy=(y-37)/5.8;
-    if(dx*dx+dy*dy<1 && t[y*mw+x]===T.GRASS) t[y*mw+x]=T.WATER;
+  // sjö i sydväst
+  for(let y=10;y<mh;y++) for(let x=2;x<mw;x++){
+    const dx=(x-26)/13.5, dy=(y-70)/8.5;
+    if(dx*dx+dy*dy<1 && get(x,y)===T.GRASS) set(x,y,T.WATER);
   }
-  for(let y=1;y<mh-1;y++) for(let x=1;x<mw-1;x++){
-    if(t[y*mw+x]!==T.GRASS) continue;
-    if([t[(y-1)*mw+x],t[(y+1)*mw+x],t[y*mw+x-1],t[y*mw+x+1]].includes(T.WATER)) t[y*mw+x]=T.SAND;
+  for(let y=11;y<mh-1;y++) for(let x=3;x<mw-3;x++){
+    if(get(x,y)!==T.GRASS) continue;
+    if([get(x,y-1),get(x,y+1),get(x-1,y),get(x+1,y)].includes(T.WATER)) set(x,y,T.SAND);
   }
-  // stig från spawn till grottan
-  for(let y=8;y<=44;y++){
-    const x0 = 32 + Math.round(2.2*Math.sin(y*0.33));
-    for(let x=x0-1;x<=x0+1;x++) if(t[y*mw+x]!==T.WATER) t[y*mw+x]=T.PATH;
+  // öknen i sydost (taggig kant)
+  for(let y=50;y<=90;y++) for(let x=96;x<mw-2;x++){
+    if(x >= 100 - ((y*7)%5) && get(x,y)===T.GRASS) set(x,y,T.SAND);
   }
-  // spawn-glänta
-  for(let y=40;y<=44;y++) for(let x=28;x<=36;x++) if(t[y*mw+x]===T.GRASS||t[y*mw+x]===T.TREE) t[y*mw+x]=T.PATH;
-  // träd + blommor
-  for(let y=9;y<mh-2;y++) for(let x=2;x<mw-2;x++){
-    if(t[y*mw+x]!==T.GRASS) continue;
-    if(dist(x,y,32,42)<7) continue;
+  // huvudstig: spawn -> norra porten (genom västra passet i ryggen)
+  for(let y=10;y<=88;y++){
+    const x0 = 64 + Math.round(2.4*Math.sin(y*0.27));
+    for(let x=x0-1;x<=x0+1;x++) if(get(x,y)!==T.WATER) set(x,y,T.PATH);
+  }
+  // västlig stig till Fladdermusgrottan + östlig till öknen/Kristallgrottan
+  for(let x=31;x<=64;x++) if(get(x,60)!==T.WATER) set(x,60,T.PATH);
+  for(let y=48;y<=60;y++) set(30,y,T.PATH), set(31,y,T.PATH);
+  for(let x=66;x<=100;x++) set(x,48,T.PATH);
+  for(let y=12;y<=48;y++) set(100,y,T.PATH);
+  for(let x=100;x<=109;x++) set(x,11,T.PATH), set(x,12,T.PATH);
+  // gläntor: spawn + butiker + grottmynningar
+  for(let y=82;y<=88;y++) for(let x=56;x<=74;x++) if(get(x,y)!==T.WATER) set(x,y,T.PATH);
+  for(let y=38;y<=41;y++) for(let x=60;x<=68;x++) if(get(x,y)===T.GRASS||get(x,y)===T.TREE) set(x,y,T.PATH);
+  for(let y=10;y<=11;y++){ for(let x=63;x<=65;x++) set(x,y,T.PATH); for(let x=107;x<=109;x++) set(x,y,T.PATH); }
+  for(let y=46;y<=47;y++) for(let x=29;x<=31;x++) set(x,y,T.PATH);
+  // grottdörrar
+  set(64,9,T.DOOR);  w.doors.push({tx:64,ty:9,to:'du',dx:20.5*TS,dy:31.5*TS});
+  set(108,9,T.DOOR); w.doors.push({tx:108,ty:9,to:'crys',dx:13.5*TS,dy:17.5*TS});
+  set(30,45,T.DOOR); w.doors.push({tx:30,ty:45,to:'bat',dx:13.5*TS,dy:17.5*TS});
+  // träd (tät skog i väst) + blommor
+  for(let y=11;y<mh-2;y++) for(let x=2;x<mw-2;x++){
+    if(get(x,y)!==T.GRASS) continue;
+    if(dist(x,y,64,85)<8) continue;
+    const dense = (x<52 && y>13 && y<41) ? 0.16 : 0.06;
     const r = rng();
-    if(r<0.075) t[y*mw+x]=T.TREE;
-    else if(r<0.13) t[y*mw+x]=T.FLOWER;
+    if(r<dense) set(x,y,T.TREE);
+    else if(r<dense+0.05) set(x,y,T.FLOWER);
   }
+  // butik 1 (vid spawn): dryck, hjärta, stövlar
+  w.merchants.push({x:70.5*TS, y:82.2*TS});
+  [['potion',68.5],['heart',70.5],['spd',72.5]].forEach(([kind,tx])=>{
+    w.shops.push({x:tx*TS, y:83.6*TS, kind});
+  });
+  // butik 2 (norr om passet): vapen, amulett, hjärta
+  w.merchants.push({x:64*TS, y:38.4*TS});
+  [['dmg',62],['cdr',64],['heart',66]].forEach(([kind,tx])=>{
+    w.shops.push({x:tx*TS, y:39.8*TS, kind});
+  });
   // skyltar
-  t[42*mw+35] = T.SIGN;
-  w.signs.push({tx:35,ty:42,txt:'Välkommen, hjältar! Norrut ligger Slemkungens grotta.'});
-  t[9*mw+35] = T.SIGN;
-  w.signs.push({tx:35,ty:9,txt:'VARNING: Här bor Slemkungen. Vänd om... eller bli hjältar!'});
-  // fiender
-  const place = (type, n, ymin, ymax)=>{
+  const sign=(x,y,txt)=>{ set(x,y,T.SIGN); w.signs.push({tx:x,ty:y,txt}); };
+  sign(60,86,'Välkomna, hjältar! Följ stigen norrut mot äventyret.');
+  sign(61,61,'Väst: Sjön & Fladdermusgrottan · Norr: Slemkungen');
+  sign(68,47,'Genom passet: Slemkungens rike · Öst: Öknen');
+  sign(33,46,'Fladdermusgrottan — hör du vingslagen?');
+  sign(66,12,'VARNING: Slemkungens grotta. Vänd om... eller bli legender!');
+  sign(104,13,'Kristallgrottan — glittrar det där inne?');
+  sign(97,52,'Öknen — här härskar de blå slemmen.');
+  // fiender per region
+  const place = (type,n,xmin,xmax,ymin,ymax)=>{
     let placed=0, guard=0;
-    while(placed<n && guard++<500){
-      const x=3+((rng()*(mw-6))|0), y=ymin+((rng()*(ymax-ymin))|0);
-      if(SOLID.has(t[y*mw+x])) continue;
-      if(dist(x,y,32,42)<11) continue;
+    while(placed<n && guard++<800){
+      const x=xmin+((rng()*(xmax-xmin))|0), y=ymin+((rng()*(ymax-ymin))|0);
+      if(SOLID.has(get(x,y)) || get(x,y)===T.DOOR) continue;
+      if(dist(x,y,64,85)<13) continue;
       spawnEnemy(w, type, x, y); placed++;
     }
   };
-  place('slime',16,12,44);
-  place('bat',8,10,32);
-  place('skel',6,9,22);
-  // hjärtan utplacerade
-  [[10,20],[50,30],[44,12]].forEach(([x,y])=>{
-    if(!SOLID.has(t[y*mw+x])) w.pickups.push({kind:'heart',x:(x+0.5)*TS,y:(y+0.5)*TS,vx:0,vy:0,t:0});
+  place('slime',20,4,96,50,90);
+  place('slime',8,4,124,12,40);
+  place('bat',12,4,52,14,40);
+  place('skel',10,52,124,12,40);
+  place('bslime',8,98,124,50,88);
+  place('bslime',2,58,70,13,20);
+  // hjärtan utspridda i världen
+  [[20,60],[90,20],[120,60],[40,20],[110,85]].forEach(([x,y])=>{
+    if(!SOLID.has(get(x,y))) w.pickups.push({kind:'heart',x:(x+0.5)*TS,y:(y+0.5)*TS,vx:0,vy:0,t:0});
   });
+  buildMini(w);
   return w;
+}
+function genCave(key, opts){
+  const mw=26, mh=22, t = new Uint8Array(mw*mh).fill(T.DWALL);
+  const w = {mw, mh, t, enemies:[], pickups:[], signs:[], doors:[], shops:[], merchants:[], name:key, dark:true};
+  const carve=(x0,y0,x1,y1)=>{ for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++) t[y*mw+x]=T.DFLOOR; };
+  carve(11,14,15,19);
+  carve(12,8,14,14);
+  carve(4,2,21,8);
+  [[6,1],[13,1],[19,1],[3,4],[22,4],[11,13],[15,13]].forEach(([x,y])=>{
+    if(t[y*mw+x]===T.DWALL) t[y*mw+x]=T.TORCH;
+  });
+  t[19*mw+13] = T.EXIT;
+  w.doors.push({tx:13,ty:19,to:'ow',dx:opts.retX,dy:opts.retY});
+  opts.enemies.forEach(([type,x,y])=>spawnEnemy(w,type,x,y));
+  opts.coins.forEach(([x,y])=>w.pickups.push({kind:'coin',x:(x+0.5)*TS,y:(y+0.5)*TS,vx:0,vy:0,t:1}));
+  (opts.hearts||[]).forEach(([x,y])=>w.pickups.push({kind:'heart',x:(x+0.5)*TS,y:(y+0.5)*TS,vx:0,vy:0,t:0}));
+  (opts.shops||[]).forEach(([kind,x,y])=>w.shops.push({kind, x:(x+0.5)*TS, y:(y+0.5)*TS}));
+  buildMini(w);
+  return w;
+}
+function buildWorlds(n){
+  return {
+    ow: genOverworld(),
+    du: genDungeon(n),
+    bat: genCave('bat', {
+      retX:30.5*TS, retY:46.5*TS,
+      enemies:[['bat',6,4],['bat',9,6],['bat',16,4],['bat',19,6],['bat',12,3],['bat',7,7],['skel',13,5],['skel',18,3]],
+      coins:[[5,3],[6,4],[7,3],[8,5],[15,6],[16,5],[17,7],[18,6],[20,3],[19,7]],
+      hearts:[[5,7],[20,7]],
+      shops:[['heart',10,3]]
+    }),
+    crys: genCave('crys', {
+      retX:108.5*TS, retY:10.5*TS,
+      enemies:[['bslime',6,4],['bslime',18,5],['bslime',12,6],['bslime',8,7],['mini',10,4],['mini',14,3],['mini',16,7],['mini',6,6]],
+      coins:[[4,2],[5,3],[6,2],[7,4],[18,2],[19,3],[20,2],[21,4],[12,2],[13,3],[11,7],[15,6],[9,2],[17,3]],
+      hearts:[[13,7]],
+      shops:[['cdr',8,3],['potion',18,7]]
+    })
+  };
 }
 function genDungeon(nPlayers){
   const mw=40, mh=36, t = new Uint8Array(mw*mh).fill(T.DWALL);
-  const w = {mw, mh, t, enemies:[], pickups:[], signs:[], doors:[], name:'du', gateTiles:[], gateClosed:false};
+  const w = {mw, mh, t, enemies:[], pickups:[], signs:[], doors:[], shops:[], merchants:[], name:'du', dark:true, gateTiles:[], gateClosed:false};
   const carve = (x0,y0,x1,y1)=>{ for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++) t[y*mw+x]=T.DFLOOR; };
   carve(15,27,25,33);       // entrérum
   carve(18,21,22,27);       // korridor
@@ -850,7 +974,7 @@ function genDungeon(nPlayers){
   for(let x=18;x<=22;x++) w.gateTiles.push([x,9]);
   // utgång
   t[33*mw+20] = T.EXIT;
-  w.doors.push({tx:20,ty:33,to:'ow',dx:32.5*TS,dy:6*TS});
+  w.doors.push({tx:20,ty:33,to:'ow',dx:64.5*TS,dy:10.5*TS});
   // fiender
   spawnEnemy(w,'slime',17,30); spawnEnemy(w,'slime',23,30);
   spawnEnemy(w,'bslime',20,24);
@@ -863,6 +987,7 @@ function genDungeon(nPlayers){
   const bhp = 110 + 55*(nPlayers-1);
   w.enemies.push({type:'boss', x:20*TS, y:5*TS, hp:bhp, maxhp:bhp, dmg:2, r:26, spd:1,
     vx:0, vy:0, st:'wait', t:0, fx:0, fy:1, frozenT:0, flashT:0, hopN:0, active:false, dead:false});
+  buildMini(w);
   return w;
 }
 function bossRef(){ return worlds ? worlds.du.enemies.find(e=>e.type==='boss') : null; }
@@ -893,7 +1018,7 @@ function startGame(){
     const cls = CLASSES[j.ci];
     return {
       id:i, color:PCOLORS[i], ctrlId:j.ctrlId, cls,
-      x:(30+i*1.2)*TS+(i%2)*14, y:42.5*TS,
+      x:(60+i*1.3)*TS+(i%2)*14, y:85.5*TS,
       fx:0, fy:-1, hp:cls.hp, maxhp:cls.hp, r:9,
       cdA:0, cdS:0, swingT:0, dashT:0, dashHit:null, invT:0,
       downed:false, reviveT:0, kbx:0, kby:0, walkT:0, flashT:0, dustT:0,
@@ -901,15 +1026,15 @@ function startGame(){
       stats:{dmg:0, heal:0, downs:0, kills:0}
     };
   });
-  worlds = { ow: genOverworld(), du: genDungeon(players.length) };
+  worlds = buildWorlds(players.length);
   cur = 'ow'; shots=[]; parts=[]; texts=[]; coins=0; camSnap=true;
   paused=false; state='play';
 }
 function resetRun(){
-  worlds = { ow: genOverworld(), du: genDungeon(players.length) };
-  cur='ow'; shots=[]; parts=[]; texts=[]; coins=0; camSnap=true;
+  worlds = buildWorlds(players.length);
+  cur='ow'; shots=[]; parts=[]; texts=[]; camSnap=true;
   players.forEach((p,i)=>{
-    p.x=(30+i*1.2)*TS+(i%2)*14; p.y=42.5*TS;
+    p.x=(60+i*1.3)*TS+(i%2)*14; p.y=85.5*TS;
     p.maxhp = p.cls.hp + p.up.hp*2; p.hp = p.maxhp; p.downed=false;
     p.cdA=0; p.cdS=0; p.invT=0; p.dashT=0; p.reviveT=0; p.kbx=0; p.kby=0;
     p.stats={dmg:0,heal:0,downs:0,kills:0};
@@ -1104,10 +1229,10 @@ function updPlayer(p, dt){
   }
   if(c.sJP && p.cdS<=0) heroSpecial(p);
 
-  // dörrar
-  const w = CW(), tx = Math.floor(p.x/TS), ty = Math.floor(p.y/TS);
+  // dörrar (radie-check så ingen med sidooffset missar öppningen)
+  const w = CW();
   for(const d of w.doors){
-    if(tx===d.tx && ty===d.ty && !trans){
+    if(!trans && dist(p.x, p.y, (d.tx+0.5)*TS, (d.ty+0.5)*TS) < 30){
       trans = {t:0, phase:'out', cb:()=>{
         cur = d.to;
         players.forEach((q,i)=>{ q.x = d.dx+(i%3-1)*24; q.y = d.dy+Math.floor(i/3)*24; q.kbx=0; q.kby=0; });
@@ -1360,11 +1485,19 @@ function update(dt){
   for(const p of players) updPlayer(p, dt);
 
   const w = CW();
-  for(const e of w.enemies) if(e.hp>0) updEnemy(e, dt);
+  // uppdatera bara fiender i närheten av kameran (stor värld)
+  const ccx = cam.x+VW/2, ccy = cam.y+VH/2;
+  for(const e of w.enemies)
+    if(e.hp>0 && Math.abs(e.x-ccx)<VW*0.8+140 && Math.abs(e.y-ccy)<VH*0.8+140) updEnemy(e, dt);
   w.enemies = w.enemies.filter(e=>e.hp>0 || e.type==='boss');
 
   updShots(dt);
   updPickups(dt);
+
+  // ambient: pollen/eldflugor som driver genom världen
+  if(!w.dark && Math.random()<0.09)
+    parts.push({x:cam.x+Math.random()*VW, y:cam.y+Math.random()*VH,
+      vx:6+Math.random()*10, vy:-3+Math.random()*7, ttl:2.2, max:2.2, col:'#efe9bf', sz:2});
 
   for(const pt of parts){ pt.ttl-=dt; pt.x+=pt.vx*dt; pt.y+=pt.vy*dt; pt.vx*=0.95; pt.vy*=0.95; }
   parts = parts.filter(p=>p.ttl>0);
@@ -1375,8 +1508,8 @@ function update(dt){
   let cx=0, cy=0;
   players.forEach(p=>{ cx+=p.x; cy+=p.y; });
   cx/=players.length; cy/=players.length;
-  const tx = clamp(cx-VW/2, 0, w.mw*TS-VW);
-  const ty = clamp(cy-VH/2, 0, w.mh*TS-VH);
+  const tx = w.mw*TS<VW ? (w.mw*TS-VW)/2 : clamp(cx-VW/2, 0, w.mw*TS-VW);
+  const ty = w.mh*TS<VH ? (w.mh*TS-VH)/2 : clamp(cy-VH/2, 0, w.mh*TS-VH);
   if(camSnap){ cam.x=tx; cam.y=ty; camSnap=false; }
   else { cam.x = lerp(cam.x, tx, dt*5); cam.y = lerp(cam.y, ty, dt*5); }
   cam.shake = Math.max(0, cam.shake - dt*18);
@@ -1529,8 +1662,8 @@ function draw(){
     const sx=(s.tx+0.5)*TS, sy=(s.ty+0.5)*TS;
     if(players.some(p=>dist(p.x,p.y,sx,sy)<52)) drawBubble(sx-ox, sy-oy-24, s.txt);
   }
-  // mörker i grottan
-  if(cur==='du') drawDarkness(ox, oy, w);
+  // mörker i grottor
+  if(w.dark) drawDarkness(ox, oy, w);
   // svävande text
   ctx.font = 'bold 15px monospace'; ctx.textAlign='center';
   for(const t of texts){
@@ -1710,6 +1843,24 @@ function drawHUD(){
   dspr(SPR.coin, VW-92, 30, 2);
   ctx.font='bold 15px monospace'; ctx.fillStyle='#f0c33c';
   ctx.fillText(''+coins, VW-76, 27);
+  // minimap
+  const mw0 = CW();
+  if(mw0.mini){
+    const msc = Math.min(150/mw0.mw, 110/mw0.mh);
+    const mmw = mw0.mw*msc, mmh = mw0.mh*msc;
+    const mx = VW-mmw-10, my = 42;
+    ctx.globalAlpha = 0.82;
+    ctx.fillStyle = 'rgba(13,11,22,0.65)';
+    ctx.fillRect(mx-3, my-3, mmw+6, mmh+6);
+    ctx.drawImage(mw0.mini, mx, my, mmw, mmh);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#3a3452'; ctx.lineWidth = 1;
+    ctx.strokeRect(mx-2.5, my-2.5, mmw+5, mmh+5);
+    players.forEach(p=>{
+      ctx.fillStyle = p.color;
+      ctx.fillRect(mx+p.x/TS*msc-1.5, my+p.y/TS*msc-1.5, 3, 3);
+    });
+  }
   // boss-bar
   const b = bossRef();
   if(b && b.active && !b.dead && cur==='du'){
@@ -1944,9 +2095,12 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 window.__NET = NET;
-window.__DBG = ()=>({state, joiners:joiners.length, players:players.length,
+window.__DBG = ()=>({state, cur, coins, joiners:joiners.length, players:players.length,
   ci:joiners[0]?joiners[0].ci:null, ready:joiners[0]?joiners[0].ready:null,
-  px:players[0]?Math.round(players[0].x):null, py:players[0]?Math.round(players[0].y):null});
+  px:players[0]?Math.round(players[0].x):null, py:players[0]?Math.round(players[0].y):null,
+  up:players[0]?players[0].up:null, hp:players[0]?players[0].hp:null, maxhp:players[0]?players[0].maxhp:null});
+window.__GIVE = n=>{ coins += n; };
+window.__TP = (tx,ty)=>{ players.forEach((p,i)=>{ p.x=(tx+i*0.8)*TS; p.y=ty*TS; }); camSnap = true; };
 if(MODE==='ctrl'){
   startCtrl(URLQ.get('room'));
 } else if(MODE==='choose'){
