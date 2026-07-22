@@ -759,8 +759,8 @@ const SOLID = new Set([T.TREE,T.WATER,T.ROCK,T.DWALL,T.SIGN,T.TORCH,T.GATE,T.BLO
 // byggnader ur arket: [källrect, fotavtryck i tiles (solid bas)]
 const STRUCTS = {
   house1:   { sx:112, sy:0,   w:64, h:80, fw:4, fh:2 },
-  house2:   { sx:192, sy:0,   w:64, h:80, fw:4, fh:2 },
-  hut:      { sx:208, sy:80,  w:48, h:64, fw:3, fh:2 },
+  house2:   { sx:192, sy:0,   w:64, h:96, fw:4, fh:2 },
+  hut:      { sx:208, sy:88,  w:48, h:64, fw:3, fh:2 },
   fountain: { sx:352, sy:144, w:48, h:48, fw:3, fh:2 }
 };
 function tileCv(fn){
@@ -938,6 +938,29 @@ function applySheets(){
     g.drawImage(tileImgs[T.DFLOOR][0], 0, 0);
     tileImgs.gateShape(g);
     tileImgs[T.GATE] = [c]; }
+  // klippbar buske: arkets runda buske (32x32 vid 0,96), bakgrund nycklad
+  tileImgs.bushObj = (()=>{
+    const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+    const g = c.getContext('2d');
+    g.drawImage(owSheet, 0, 96, 32, 32, 0, 0, 32, 32);
+    const id = g.getImageData(0, 0, 32, 32), d = id.data;
+    const keys = [];
+    [[0,0],[29,0],[0,29],[29,29]].forEach(([cx,cy])=>{
+      for(let dy=0;dy<3;dy++) for(let dx=0;dx<3;dx++){
+        const i = ((cy+dy)*32+(cx+dx))*4;
+        if(d[i+3]>10) keys.push([d[i], d[i+1], d[i+2]]); // nyckla bara om bakgrunden är opak
+      }
+    });
+    if(keys.length){
+      for(let i=0;i<d.length;i+=4){
+        for(const [kr,kg2,kb] of keys){
+          if(Math.abs(d[i]-kr)<10 && Math.abs(d[i+1]-kg2)<10 && Math.abs(d[i+2]-kb)<10){ d[i+3] = 0; break; }
+        }
+      }
+      g.putImageData(id, 0, 0);
+    }
+    return c;
+  })();
   // trädet: arkets stora lummiga krona (40x32 vid x80,y256) + ritad stam
   treeImg = (()=>{
     const c = document.createElement('canvas'); c.width = 40; c.height = 48;
@@ -1205,15 +1228,23 @@ function genOverworld(seed){
   for(let y=11;y<mh-2;y++) for(let x=2;x<mw-2;x++){
     if(get(x,y)!==T.GRASS) continue;
     if(dist(x,y,spawnCx,spawnCy)<10) continue;
-    const dense = inForest(x,y) ? 0.07 : 0.025;
+    const dense = inForest(x,y) ? 0.12 : 0.03;
     const r = rng();
     if(r<dense) set(x,y,T.TREE);
     else if(r<dense+0.05) set(x,y,T.FLOWER);
   }
-  for(let i=0;i<80;i++){
+  // trädungar — små täta klungor som ramar in världen
+  for(let i=0;i<14;i++){
+    const gx = ri(6,120), gy = ri(14,90);
+    if(dist(gx,gy,spawnCx,spawnCy)<12) continue;
+    for(let yy=0;yy<2;yy++) for(let xx=0;xx<3;xx++)
+      if(rng()<0.8 && get(gx+xx,gy+yy)===T.GRASS) set(gx+xx, gy+yy, T.TREE);
+  }
+  // klippbara buskfält (arkets runda buskar)
+  for(let i=0;i<150;i++){
     const gx = 4+((rng()*(mw-8))|0), gy = 12+((rng()*(mh-16))|0);
-    for(let k=0;k<6;k++){
-      const x = gx+((rng()*3)|0)-1, y = gy+((rng()*3)|0)-1;
+    for(let k=0;k<9;k++){
+      const x = gx+((rng()*4)|0)-1, y = gy+((rng()*3)|0)-1;
       if(x>1 && y>10 && x<mw-2 && y<mh-2 && get(x,y)===T.GRASS && dist(x,y,spawnCx,spawnCy)>7) set(x,y,T.BUSH);
     }
   }
@@ -1437,10 +1468,11 @@ function cutGrass(w, px, py, r){
   const ty0 = Math.floor((py-r)/TS), ty1 = Math.floor((py+r)/TS);
   let cut = 0;
   for(let ty=ty0; ty<=ty1; ty++) for(let tx=tx0; tx<=tx1; tx++){
-    if(tileAt(w,tx,ty)!==T.BUSH) continue;
+    const tt = tileAt(w,tx,ty);
+    if(tt!==T.BUSH && tt!==T.FLOWER) continue;
     if(dist(px,py,(tx+0.5)*TS,(ty+0.5)*TS) > r+12) continue;
     setTile(w, tx, ty, T.GRASS);
-    burst((tx+0.5)*TS, (ty+0.5)*TS, '#4fae3f', 8, 90);
+    burst((tx+0.5)*TS, (ty+0.5)*TS, tt===T.FLOWER?'#e8a0b0':'#4fae3f', 8, 90);
     const roll = Math.random();
     if(roll<0.08) w.pickups.push({kind:'coin', x:(tx+0.5)*TS, y:(ty+0.5)*TS, vx:0, vy:0, t:0});
     else if(roll<0.12) w.pickups.push({kind:'heart', x:(tx+0.5)*TS, y:(ty+0.5)*TS, vx:0, vy:0, t:0});
@@ -2062,7 +2094,8 @@ function draw(){
         }
       }
       if(t===T.BUSH){
-        if(HERO.ready) ctx.drawImage(OBJ.bush, tx*TS-ox, ty*TS-oy, TS, TS);
+        if(tileImgs.bushObj) ctx.drawImage(tileImgs.bushObj, tx*TS-ox, ty*TS-oy, TS, TS);
+        else if(HERO.ready) ctx.drawImage(OBJ.bush, tx*TS-ox, ty*TS-oy, TS, TS);
         else {
           ctx.fillStyle = '#3f8f3f';
           ctx.fillRect(tx*TS-ox+8, ty*TS-oy+12, 4, 14);
