@@ -2726,8 +2726,10 @@ function enableLocalPad(){
   padUI.style.display = 'flex';
   bindPadControls(TCTRL, ()=>{});
 }
+let ctrlStarted = false;
 function startCtrl(code){
-  if(MODE==='ctrl') return;
+  if(ctrlStarted) return;
+  ctrlStarted = true;
   MODE = 'ctrl';
   document.getElementById('wrap').style.display = 'none';
   document.getElementById('chooseUI').style.display = 'none';
