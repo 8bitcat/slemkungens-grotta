@@ -182,14 +182,14 @@ function updateQR(){
 
 // ===================== INPUT =====================
 const keys = {};
-const PREVENT = new Set(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','ShiftRight','KeyW','KeyA','KeyS','KeyD','KeyE']);
+const PREVENT = new Set(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','ShiftRight','KeyW','KeyA','KeyS','KeyD','KeyE','Tab','KeyI']);
 window.addEventListener('keydown', e=>{
   if(e.target && e.target.tagName==='INPUT') return;
   if(PREVENT.has(e.code)) e.preventDefault();
   keys[e.code] = true;
   initAudio();
   if(e.code==='KeyM'){ musicOn = !musicOn; toast(musicOn?'Musik PÅ':'Musik AV'); }
-  if((e.code==='KeyP'||e.code==='Escape') && state==='play'){ paused = !paused; }
+  if((e.code==='KeyP'||e.code==='Escape'||e.code==='KeyI'||e.code==='Tab') && state==='play'){ paused = !paused; }
 });
 window.addEventListener('keyup', e=>{ keys[e.code] = false; });
 window.addEventListener('blur', ()=>{ for(const k in keys) keys[k]=false; if(state==='play') paused = true; });
@@ -1306,6 +1306,7 @@ let coins = 0, camSnap = true;
 let trans = null;      // {t, phase:'out'|'in', cb}
 let toastMsg = null, toastT = 0;
 let winT = 0, overT = 0, time = 0;
+let bannerT = 0, bossDefeated = false;
 let joiners = [];
 let countdown = 3;
 const PCOLORS = ['#4fa4ff','#ff6a5e','#ffd24f','#c07bff','#ff9c3f'];
@@ -1346,11 +1347,13 @@ function startGame(){
   joiners = [];
   worlds = buildWorlds(players.length);
   cur = 'ow'; shots=[]; parts=[]; texts=[]; coins=0; camSnap=true;
+  bossDefeated=false; bannerT=0;
   paused=false; state='play';
 }
 function resetRun(){
   worlds = buildWorlds(players.length);
   cur='ow'; shots=[]; parts=[]; texts=[]; camSnap=true;
+  bossDefeated=false; bannerT=0;
   players.forEach((p,i)=>{
     p.x=(60+i*1.3)*TS+(i%2)*14; p.y=85.5*TS;
     p.maxhp = p.cls.hp + p.up.hp*2; p.hp = p.maxhp; p.downed=false;
@@ -1812,7 +1815,15 @@ function updPickups(dt){
       else if(pk.kind==='heart'){
         if(tgt.p.hp<tgt.p.maxhp){ tgt.p.hp=Math.min(tgt.p.maxhp,tgt.p.hp+4); sfx('heart'); ftext(tgt.p.x,tgt.p.y-30,'+2 ♥','#ff8a8a'); pk.dead=true; }
       }
-      else if(pk.kind==='crystal'){ pk.dead=true; state='win'; winT=0; sfx('fanfare'); }
+      else if(pk.kind==='crystal'){
+        pk.dead = true;
+        bossDefeated = true;
+        coins += 50;
+        bannerT = 6;
+        sfx('fanfare');
+        players.forEach(q=>{ q.downed=false; q.hp=q.maxhp; q.invT=2; burst(q.x, q.y-10, '#f0c33c', 20, 140); });
+        toast('SLEMKUNGEN BESEGRAD! +50 mynt — äventyret fortsätter!');
+      }
     }
   }
   w.pickups = w.pickups.filter(p=>!p.dead);
@@ -1825,6 +1836,7 @@ function update(dt){
   updMusic();
   pushStatus();
   if(toastT>0) toastT -= dt;
+  if(bannerT>0 && !paused) bannerT -= dt;
 
   if(state==='select'){ updSelect(dt); return; }
   if(state==='win' || state==='over'){
@@ -2118,7 +2130,19 @@ function draw(){
   if(paused) drawPause();
   if(state==='win') drawWin();
   if(state==='over') drawOver();
-  if(toastT>0){
+  if(bannerT>0 && !paused){
+    ctx.textAlign='center';
+    ctx.globalAlpha = clamp(bannerT, 0, 1);
+    const pulse = 1 + Math.sin(time*6)*0.04;
+    ctx.font = 'bold '+Math.round(46*pulse)+'px monospace';
+    ctx.fillStyle='#231a30'; ctx.fillText('SEGER!', VW/2+3, 173);
+    ctx.fillStyle='#f0c33c'; ctx.fillText('SEGER!', VW/2, 170);
+    ctx.font = '16px monospace';
+    ctx.fillStyle='#f4f0e4'; ctx.fillText('Slemkungens kristall är er — äventyret fortsätter!', VW/2, 200);
+    ctx.globalAlpha = 1;
+    if(Math.random()<0.35) parts.push({x:cam.x+Math.random()*VW, y:cam.y-10, vx:(Math.random()-0.5)*40, vy:70+Math.random()*70, ttl:1.8, max:1.8, col:['#f0c33c','#4fa4ff','#ff6a5e','#8fe89a'][(Math.random()*4)|0], sz:4});
+  }
+  if(toastT>0 && !paused){
     ctx.font='bold 22px monospace'; ctx.textAlign='center';
     ctx.globalAlpha = clamp(toastT,0,1);
     ctx.fillStyle='#231a30'; ctx.fillText(toastMsg, VW/2+2, 132);
@@ -2396,23 +2420,50 @@ function drawHUD(){
   }
 }
 function drawPause(){
-  ctx.fillStyle='rgba(13,11,22,0.8)'; ctx.fillRect(0,0,VW,VH);
+  ctx.fillStyle='rgba(13,11,22,0.88)'; ctx.fillRect(0,0,VW,VH);
   ctx.textAlign='center';
-  ctx.font='bold 42px monospace'; ctx.fillStyle='#f0c33c';
-  ctx.fillText('PAUS', VW/2, 180);
-  ctx.font='15px monospace'; ctx.fillStyle='#f4f0e4';
-  const lines = [
-    'P / Escape — fortsätt',
-    'M — musik på/av',
-    '',
-    'Spelare 1: WASD + Blanksteg (attack) + E (special)',
-    'Spelare 2: Pilar + Enter (attack) + Höger Shift (special)',
-    'Handkontroll: spak + A (attack) + X/B (special)',
-    '',
-    'Fallna hjältar: stå nära i 3 sek för att väcka dem!',
-    'Helarens special väcker direkt.'
-  ];
-  lines.forEach((l,i)=>ctx.fillText(l, VW/2, 240+i*24));
+  ctx.font='bold 34px monospace'; ctx.fillStyle='#f0c33c';
+  ctx.fillText('MENY & INVENTARIER', VW/2, 56);
+  // laggemensamt: mynt + troféer
+  ctx.font='bold 16px monospace'; ctx.fillStyle='#f0c33c'; ctx.textAlign='left';
+  dspr(SPR.coin, VW/2-150, 92, 2);
+  ctx.fillText(coins+' mynt', VW/2-134, 88);
+  if(bossDefeated){
+    dspr(SPR.crystal, VW/2+40, 96, 2);
+    ctx.fillStyle='#8fe89a'; ctx.fillText('Slemkungens kristall', VW/2+58, 88);
+  } else {
+    ctx.fillStyle='#6a6580'; ctx.fillText('Trofé saknas: Slemkungen lever än…', VW/2+20, 88);
+  }
+  // en inventariepanel per spelare
+  const pw = 430, colX = [VW/2-pw-12, VW/2+12];
+  players.forEach((p,i)=>{
+    const x = colX[i%2], y = 112 + Math.floor(i/2)*128;
+    ctx.fillStyle='rgba(28,22,46,0.95)'; ctx.fillRect(x, y, pw, 118);
+    ctx.strokeStyle=p.color; ctx.lineWidth=2; ctx.strokeRect(x+1, y+1, pw-2, 116);
+    if(p.cls.icon) ctx.drawImage(p.cls.icon, x+10, y+10, 32, 32);
+    else dspr(p.cls.img, x+26, y+44, 2);
+    ctx.font='bold 15px monospace'; ctx.fillStyle=p.color; ctx.textAlign='left';
+    ctx.fillText('Spelare '+(p.id+1)+' — '+p.cls.name, x+52, y+22);
+    drawHearts(x+52, y+30, p.hp, p.maxhp);
+    // uppgraderingar med antal
+    const ups = [['heart',p.up.hp],['dmg',p.up.dmg],['spd',p.up.spd],['cdr',p.up.cdr]];
+    let ux = x+12;
+    ctx.font='bold 12px monospace';
+    for(const [kind,n] of ups){
+      ctx.globalAlpha = n>0 ? 1 : 0.25;
+      dspr(ICONS[kind], ux+8, y+78, 2);
+      ctx.fillStyle = n>0 ? '#f4f0e4' : '#6a6580';
+      ctx.fillText('x'+n, ux+18, y+76);
+      ctx.globalAlpha = 1;
+      ux += 52;
+    }
+    ctx.font='12px monospace'; ctx.fillStyle='#8a86a0';
+    ctx.fillText('Skada '+p.stats.dmg+' · Läkt '+p.stats.heal+' · Fiender '+p.stats.kills+' · Föll '+p.stats.downs+' ggr', x+12, y+106);
+  });
+  // kontroller + tips
+  ctx.textAlign='center'; ctx.font='12px monospace'; ctx.fillStyle='#6a6580';
+  ctx.fillText('P / Escape / I — fortsätt · M — musik av/på · Fallna väcks av en vän nära i 3 sek (Helarens special väcker direkt)', VW/2, VH-40);
+  ctx.fillText('WASD+Blanksteg+E · Pilar+Enter+Hö.Shift · Handkontroll: spak+A+B · Mobil: skanna QR med kod '+(NET.open?NET.code.toUpperCase():'—'), VW/2, VH-22);
 }
 function drawWin(){
   ctx.fillStyle='rgba(13,11,22,'+clamp(winT,0,0.85)+')'; ctx.fillRect(0,0,VW,VH);
@@ -2702,6 +2753,9 @@ window.__DBG = ()=>({state, cur, coins, joiners:joiners.length, players:players.
   up:players[0]?players[0].up:null, hp:players[0]?players[0].hp:null, maxhp:players[0]?players[0].maxhp:null});
 window.__GIVE = n=>{ coins += n; };
 window.__TILE = (tx,ty)=>tileAt(CW(), tx, ty);
+window.__GOTO = (wname,tx,ty)=>{ cur=wname; players.forEach((p,i)=>{ p.x=(tx+i*0.8)*TS; p.y=ty*TS; }); shots=[]; camSnap=true; };
+window.__KILLBOSS = ()=>{ const b=bossRef(); if(b && !b.dead){ b.active=true; damageEnemy(b, 99999, b.x, b.y, players[0]); } };
+window.__STATE = ()=>({ bossDefeated, paused, banner:bannerT>0 });
 window.__FINDBUSH = ()=>{
   const w = CW();
   for(let ty=12;ty<w.mh-2;ty++) for(let tx=2;tx<w.mw-2;tx++)
