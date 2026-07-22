@@ -264,7 +264,7 @@ function pollInputs(){
 function C(id){ return CTRL[id] || {x:0,y:0,attack:false,special:false,start:false,aJP:false,sJP:false,stJP:false,lJP:false,rJP:false}; }
 
 // ===================== LJUD =====================
-let actx = null, sfxGain = null, musGain = null, musicOn = true;
+let actx = null, sfxGain = null, musGain = null, musicOn = true, noiseBuf = null;
 let musNext = 0, musStep = 0;
 function initAudio(){
   if(actx) return;
@@ -273,6 +273,9 @@ function initAudio(){
     sfxGain = actx.createGain(); sfxGain.gain.value = 0.5; sfxGain.connect(actx.destination);
     musGain = actx.createGain(); musGain.gain.value = 0.32; musGain.connect(actx.destination);
     musNext = actx.currentTime + 0.1;
+    noiseBuf = actx.createBuffer(1, actx.sampleRate*0.1, actx.sampleRate);
+    const nd = noiseBuf.getChannelData(0);
+    for(let i=0;i<nd.length;i++) nd[i] = Math.random()*2-1;
   }catch(e){}
 }
 const freq = n=>440*Math.pow(2,(n-69)/12);
@@ -319,25 +322,61 @@ function sfx(name){
     case 'shoot2': tone(300,140,0.1,'square',0.14); break;
   }
 }
-const MELODY = [69,0,72,74, 76,0,74,72, 69,0,67,64, 67,69,72,0, 69,0,72,76, 79,0,76,74, 72,0,74,72, 69,67,69,0];
-const BASSLN = [45,0,45,0, 41,0,41,0, 43,0,43,0, 45,0,43,41, 45,0,45,0, 47,0,47,0, 48,0,48,0, 45,0,43,0];
+// Egen hjältemodig äventyrslåt (originalkomposition) — A-moll, 64 steg,
+// drivande åttondelsbas och trummor för energisk retrokänsla
+const MELODY = [
+  69,0,72,74, 76,76,0,74, 72,74,76,79, 81,0,79,76,
+  77,0,76,74, 76,0,74,72, 70,72,74,77, 74,0,72,0,
+  81,0,81,83, 84,0,83,81, 79,0,79,81, 83,0,81,79,
+  77,79,81,84, 83,81,79,77, 76,74,72,74, 69,0,0,0
+];
+const BASSLN = [
+  45,52,45,52, 41,48,41,48, 48,55,48,55, 43,50,43,50,
+  45,52,45,52, 43,50,43,50, 41,48,41,48, 40,47,40,47,
+  41,48,41,48, 48,55,48,55, 43,50,43,50, 45,52,45,52,
+  41,48,41,48, 43,50,43,50, 40,47,40,47, 45,45,52,45
+];
 function updMusic(){
   if(!actx || !musicOn || state==='select') return;
   if(musNext < actx.currentTime - 0.1) musNext = actx.currentTime + 0.05;
   const boss = bossActive();
-  const stepDur = boss ? 0.125 : 0.165;
-  const tr = boss ? -3 : 0;
-  while(musNext < actx.currentTime + 0.25){
-    const m = MELODY[musStep % MELODY.length];
-    const b = BASSLN[musStep % BASSLN.length];
+  const stepDur = boss ? 0.115 : 0.14;
+  const tr = boss ? -5 : 0;
+  while(musNext < actx.currentTime + 0.3){
+    const i = musStep % MELODY.length;
+    const m = MELODY[i], b = BASSLN[i];
     if(m){ const o=actx.createOscillator(),g=actx.createGain();
       o.type='square'; o.frequency.value=freq(m+tr);
-      g.gain.setValueAtTime(0.10,musNext); g.gain.exponentialRampToValueAtTime(0.001,musNext+stepDur*0.95);
+      g.gain.setValueAtTime(0.09,musNext); g.gain.exponentialRampToValueAtTime(0.001,musNext+stepDur*0.92);
       o.connect(g); g.connect(musGain); o.start(musNext); o.stop(musNext+stepDur); }
     if(b){ const o=actx.createOscillator(),g=actx.createGain();
       o.type='triangle'; o.frequency.value=freq(b+tr);
-      g.gain.setValueAtTime(0.16,musNext); g.gain.exponentialRampToValueAtTime(0.001,musNext+stepDur*1.8);
-      o.connect(g); g.connect(musGain); o.start(musNext); o.stop(musNext+stepDur*2); }
+      g.gain.setValueAtTime(0.15,musNext); g.gain.exponentialRampToValueAtTime(0.001,musNext+stepDur*1.05);
+      o.connect(g); g.connect(musGain); o.start(musNext); o.stop(musNext+stepDur*1.1); }
+    if(noiseBuf){
+      // hi-hat-tick varannat steg, virvel på 4:an, bastrumma på 1:an
+      if(i%2===0){
+        const s=actx.createBufferSource(); s.buffer=noiseBuf;
+        const g=actx.createGain(), f=actx.createBiquadFilter();
+        f.type='highpass'; f.frequency.value=6000;
+        g.gain.setValueAtTime(0.05,musNext); g.gain.exponentialRampToValueAtTime(0.001,musNext+0.03);
+        s.connect(f); f.connect(g); g.connect(musGain); s.start(musNext); s.stop(musNext+0.04);
+      }
+      if(i%8===4){
+        const s=actx.createBufferSource(); s.buffer=noiseBuf;
+        const g=actx.createGain(), f=actx.createBiquadFilter();
+        f.type='highpass'; f.frequency.value=1800;
+        g.gain.setValueAtTime(0.09,musNext); g.gain.exponentialRampToValueAtTime(0.001,musNext+0.08);
+        s.connect(f); f.connect(g); g.connect(musGain); s.start(musNext); s.stop(musNext+0.09);
+      }
+      if(i%8===0){
+        const o=actx.createOscillator(), g=actx.createGain();
+        o.type='triangle'; o.frequency.setValueAtTime(95,musNext);
+        o.frequency.exponentialRampToValueAtTime(42,musNext+0.09);
+        g.gain.setValueAtTime(0.3,musNext); g.gain.exponentialRampToValueAtTime(0.001,musNext+0.1);
+        o.connect(g); g.connect(musGain); o.start(musNext); o.stop(musNext+0.11);
+      }
+    }
     musNext += stepDur; musStep++;
   }
 }
@@ -715,8 +754,15 @@ function shadow(x,y,w){
 }
 
 // ===================== TILES =====================
-const T = {GRASS:0,TREE:1,WATER:2,PATH:3,SAND:4,ROCK:5,FLOWER:6,DFLOOR:7,DWALL:8,DOOR:9,TORCH:10,SIGN:11,GATE:12,EXIT:13,BUSH:14};
-const SOLID = new Set([T.TREE,T.WATER,T.ROCK,T.DWALL,T.SIGN,T.TORCH,T.GATE]);
+const T = {GRASS:0,TREE:1,WATER:2,PATH:3,SAND:4,ROCK:5,FLOWER:6,DFLOOR:7,DWALL:8,DOOR:9,TORCH:10,SIGN:11,GATE:12,EXIT:13,BUSH:14,BLOCK:15,BRIDGE:16};
+const SOLID = new Set([T.TREE,T.WATER,T.ROCK,T.DWALL,T.SIGN,T.TORCH,T.GATE,T.BLOCK]);
+// byggnader ur arket: [källrect, fotavtryck i tiles (solid bas)]
+const STRUCTS = {
+  house1:   { sx:112, sy:0,   w:64, h:80, fw:4, fh:2 },
+  house2:   { sx:192, sy:0,   w:64, h:80, fw:4, fh:2 },
+  hut:      { sx:208, sy:80,  w:48, h:64, fw:3, fh:2 },
+  fountain: { sx:352, sy:144, w:48, h:48, fw:3, fh:2 }
+};
 function tileCv(fn){
   const c = document.createElement('canvas'); c.width=16; c.height=16;
   const g = c.getContext('2d'); fn(g); return c;
@@ -803,6 +849,11 @@ const tileImgs = {};
     g.fillStyle='#6b4520'; g.fillRect(4,5,8,1); g.fillRect(4,7,6,1);
   };
   tileImgs[T.SIGN] = [tileCv(g=>{ grassBase(g); tileImgs.signShape(g); })];
+  tileImgs[T.BRIDGE] = [tileCv(g=>{
+    g.fillStyle='#8a5e2c'; g.fillRect(0,0,16,16);
+    g.fillStyle='#6b4520'; for(let y=3;y<16;y+=4) g.fillRect(0,y,16,1);
+    g.fillStyle='#a5763f'; g.fillRect(0,0,16,1);
+  })];
   tileImgs.gateShape = g=>{
     g.fillStyle='#c8ccd8'; for(let x=1;x<16;x+=4) g.fillRect(x,0,2,16);
     g.fillStyle='#8a8e9c'; g.fillRect(0,1,16,2); g.fillRect(0,13,16,2);
@@ -867,6 +918,7 @@ function applySheets(){
   tileImgs.rockFace = S(5,13);
   tileImgs.rockLip = S(5,11);
   tileImgs[T.DOOR] = [S(7,12)];
+  tileImgs[T.BRIDGE] = [S(9,7)];
   // grotta
   tileImgs[T.DFLOOR] = [C2(7,3)];
   tileImgs[T.DWALL] = [C2(2,1)];
@@ -973,6 +1025,22 @@ function applyActorSheets(){
   ENS.flower = [0,1,2,3,4,5,6,7].map(i=>frameOf(objSheet, i*32, 160, 32, 32));
   ENS.ball = [0,1,2].map(i=>frameOf(objSheet, 128+i*32, 192, 32, 32));
   ENS.log = LOG_ROWS.map(row=>[0,1,2,3].map(i=>frameOf(logSheet, i*32, row, 32, 32)));
+  ENS.logSleep = [frameOf(logSheet, 128, 0, 32, 32), frameOf(logSheet, 160, 0, 32, 32)];
+  // färgvarianter för fler monstertyper
+  const recolorFrames = (frames, fn)=>frames.map(f=>{
+    const c = document.createElement('canvas'); c.width = f.width; c.height = f.height;
+    const g = c.getContext('2d'); g.drawImage(f, 0, 0);
+    const id = g.getImageData(0, 0, c.width, c.height), d = id.data;
+    for(let i=0;i<d.length;i+=4){
+      if(!d[i+3]) continue;
+      const v = fn(d[i], d[i+1], d[i+2]);
+      d[i] = Math.min(255, v[0]); d[i+1] = Math.min(255, v[1]); d[i+2] = Math.min(255, v[2]);
+    }
+    g.putImageData(id, 0, 0);
+    return c;
+  });
+  ENS.ball2 = recolorFrames(ENS.ball, (r,g,b)=>[r*1.7, g*0.6, b*0.7]);
+  ENS.flower2 = recolorFrames(ENS.flower, (r,g,b)=>[r*0.6, g*0.8, b*1.7]);
   OBJ.bush = frameOf(objSheet, 80, 32, 16, 16);
   HERO.ready = true;
 }
@@ -1005,7 +1073,10 @@ function spawnEnemy(w, type, tx, ty){
     bat:{hp:3,dmg:1,r:8,spd:70,fly:true},
     skel:{hp:6,dmg:1,r:10,spd:42},
     bslime:{hp:9,dmg:2,r:11,spd:1},
-    mini:{hp:2,dmg:1,r:7,spd:1}
+    mini:{hp:2,dmg:1,r:7,spd:1},
+    redball:{hp:6,dmg:2,r:10,spd:1},
+    spitter:{hp:5,dmg:1,r:10,spd:0},
+    sleeper:{hp:10,dmg:2,r:11,spd:52}
   }[type];
   w.enemies.push({type, x:(tx+0.5)*TS, y:(ty+0.5)*TS, hp:E.hp, maxhp:E.hp, dmg:E.dmg, r:E.r, spd:E.spd,
     fly:!!E.fly, vx:0, vy:0, st:'idle', t:Math.random()*1.2, fx:0, fy:1, frozenT:0, flashT:0, shootT:1+Math.random()*2});
@@ -1017,7 +1088,7 @@ function buildMini(w){
     [T.GRASS]:'#4f8c30',[T.TREE]:'#2b5a24',[T.WATER]:'#3b73d8',[T.PATH]:'#c9a05a',
     [T.SAND]:'#dcc07c',[T.ROCK]:'#8a6a4e',[T.FLOWER]:'#4f8c30',[T.DFLOOR]:'#4c4660',
     [T.DWALL]:'#211d33',[T.DOOR]:'#f0c33c',[T.TORCH]:'#211d33',[T.SIGN]:'#8a5e2c',
-    [T.GATE]:'#c8ccd8',[T.EXIT]:'#f0c33c',[T.BUSH]:'#3f7d2a'
+    [T.GATE]:'#c8ccd8',[T.EXIT]:'#f0c33c',[T.BUSH]:'#3f7d2a',[T.BLOCK]:'#7a5a36',[T.BRIDGE]:'#a5763f'
   };
   for(let y=0;y<w.mh;y++) for(let x=0;x<w.mw;x++){
     g.fillStyle = cols[w.t[y*w.mw+x]] || '#000';
@@ -1042,6 +1113,8 @@ function genOverworld(){
     const dx=(x-100)/13.5, dy=(y-72)/8.5;
     if(dx*dx+dy*dy<1 && get(x,y)===T.GRASS) set(x,y,T.WATER);
   }
+  // floden: från norra bergen ner till sjön
+  for(let y=10;y<=64;y++){ set(84,y,T.WATER); set(85,y,T.WATER); }
   for(let y=11;y<mh-1;y++) for(let x=3;x<mw-3;x++){
     if(get(x,y)!==T.GRASS) continue;
     if([get(x,y-1),get(x,y+1),get(x-1,y),get(x+1,y)].includes(T.WATER)) set(x,y,T.SAND);
@@ -1061,6 +1134,9 @@ function genOverworld(){
   for(let x=66;x<=100;x++) set(x,48,T.PATH);
   for(let y=12;y<=48;y++) set(100,y,T.PATH);
   for(let x=100;x<=109;x++) set(x,11,T.PATH), set(x,12,T.PATH);
+  // broar där östvägen korsar floden
+  set(84,47,T.BRIDGE); set(85,47,T.BRIDGE);
+  set(84,48,T.BRIDGE); set(85,48,T.BRIDGE);
   // gläntor: spawn + butiker + grottmynningar
   for(let y=82;y<=88;y++) for(let x=56;x<=74;x++) if(get(x,y)!==T.WATER) set(x,y,T.PATH);
   for(let y=38;y<=41;y++) for(let x=60;x<=68;x++) if(get(x,y)===T.GRASS||get(x,y)===T.TREE) set(x,y,T.PATH);
@@ -1086,6 +1162,18 @@ function genOverworld(){
       const x = gx+((rng()*3)|0)-1, y = gy+((rng()*3)|0)-1;
       if(x>1 && y>10 && x<mw-2 && y<mh-2 && get(x,y)===T.GRASS && dist(x,y,64,85)>6) set(x,y,T.BUSH);
     }
+  }
+  // byn: hus, brunn och hyddor längs torgets norrkant
+  w.structs = [
+    {def:'house1', tx:57, ty:80},
+    {def:'fountain', tx:62, ty:80},
+    {def:'house2', tx:66, ty:80},
+    {def:'hut', tx:71, ty:80},
+    {def:'hut', tx:88, ty:58}
+  ];
+  for(const s of w.structs){
+    const d = STRUCTS[s.def];
+    for(let yy=0;yy<d.fh;yy++) for(let xx=0;xx<d.fw;xx++) set(s.tx+xx, s.ty+yy, T.BLOCK);
   }
   // butik 1 (vid spawn): dryck, hjärta, stövlar
   w.merchants.push({x:70.5*TS, y:82.2*TS});
@@ -1116,12 +1204,16 @@ function genOverworld(){
       spawnEnemy(w, type, x, y); placed++;
     }
   };
-  place('slime',20,4,96,50,90);
+  place('slime',18,4,96,50,90);
   place('slime',8,4,124,12,40);
-  place('bat',12,4,52,14,40);
-  place('skel',10,52,124,12,40);
+  place('bat',10,4,52,14,40);
+  place('skel',8,52,124,12,40);
   place('bslime',8,4,30,54,88);
   place('bslime',2,58,70,13,20);
+  place('redball',6,4,30,54,88);
+  place('spitter',4,4,52,14,40);
+  place('spitter',4,80,120,50,66);
+  place('sleeper',6,40,124,12,44);
   // hjärtan utspridda i världen
   [[20,60],[90,20],[118,40],[40,20],[86,60]].forEach(([x,y])=>{
     if(!SOLID.has(get(x,y))) w.pickups.push({kind:'heart',x:(x+0.5)*TS,y:(y+0.5)*TS,vx:0,vy:0,t:0});
@@ -1161,7 +1253,7 @@ function buildWorlds(n){
     }),
     crys: genCave('crys', {
       retX:108.5*TS, retY:10.5*TS,
-      enemies:[['bslime',6,4],['bslime',18,5],['bslime',12,6],['bslime',8,7],['mini',10,4],['mini',14,3],['mini',16,7],['mini',6,6]],
+      enemies:[['bslime',6,4],['redball',18,5],['bslime',12,6],['redball',8,7],['mini',10,4],['mini',14,3],['sleeper',16,7],['mini',6,6]],
       coins:[[4,2],[5,3],[6,2],[7,4],[18,2],[19,3],[20,2],[21,4],[12,2],[13,3],[11,7],[15,6],[9,2],[17,3]],
       hearts:[[13,7]],
       shops:[['cdr',8,3],['potion',18,7]]
@@ -1507,18 +1599,41 @@ function updEnemy(e, dt){
   if(e.type==='boss'){ updBoss(e, dt); return; }
   const tgt = nearestPlayer(e.x, e.y);
 
-  if(e.type==='slime' || e.type==='bslime' || e.type==='mini'){
+  if(e.type==='slime' || e.type==='bslime' || e.type==='mini' || e.type==='redball'){
     e.t -= dt;
     if(e.t<=0){
-      e.t = 0.9 + Math.random()*0.8;
+      e.t = e.type==='redball' ? 0.45 + Math.random()*0.5 : 0.9 + Math.random()*0.8;
       let a;
-      if(tgt && tgt.d<230) a = Math.atan2(tgt.p.y-e.y, tgt.p.x-e.x);
+      const aggro = e.type==='redball' ? 300 : 230;
+      if(tgt && tgt.d<aggro) a = Math.atan2(tgt.p.y-e.y, tgt.p.x-e.x);
       else a = Math.random()*Math.PI*2;
-      const pow = e.type==='bslime'?170 : e.type==='mini'?150 : 140;
+      const pow = e.type==='redball'?200 : e.type==='bslime'?170 : e.type==='mini'?150 : 140;
       e.vx += Math.cos(a)*pow; e.vy += Math.sin(a)*pow;
       e.fx = Math.cos(a); e.fy = Math.sin(a);
     }
     moveBox(w, e, e.vx*dt, e.vy*dt);
+  } else if(e.type==='spitter'){
+    // rotad spottblomma: står still och spottar frön
+    if(tgt && tgt.d<260){
+      const a = Math.atan2(tgt.p.y-e.y, tgt.p.x-e.x);
+      e.fx = Math.cos(a); e.fy = Math.sin(a);
+      e.shootT -= dt;
+      if(e.shootT<=0){
+        e.shootT = 2.5;
+        sfx('shoot2');
+        shots.push({x:e.x, y:e.y-12, vx:Math.cos(a)*160, vy:Math.sin(a)*160, dmg:1, kind:'slimeb', from:'e', ttl:2.2, r:6});
+      }
+    }
+  } else if(e.type==='sleeper'){
+    // sovande stubbe: vaknar när någon smyger för nära
+    if(e.st!=='awake'){
+      if(tgt && tgt.d<72){ e.st='awake'; e.flashT=0.2; sfx('edie'); ftext(e.x, e.y-30, '!', '#ffd24f'); }
+    } else if(tgt){
+      const a = Math.atan2(tgt.p.y-e.y, tgt.p.x-e.x);
+      e.fx = Math.cos(a); e.fy = Math.sin(a);
+      if(tgt.d>16) moveBox(w, e, Math.cos(a)*e.spd*dt, Math.sin(a)*e.spd*dt);
+    }
+    if(e.vx||e.vy) moveBox(w, e, e.vx*dt, e.vy*dt);
   } else if(e.type==='bat'){
     if(tgt && tgt.d<280){
       const a = Math.atan2(tgt.p.y-e.y, tgt.p.x-e.x) + Math.sin(time*5+e.x)*0.6;
@@ -1849,7 +1964,7 @@ function draw(){
       if(t===T.GRASS) img = tileImgs[T.GRASS][(tx*7+ty*13)%tileImgs[T.GRASS].length];
       else if(t===T.TREE){ img = tileImgs[T.GRASS][(tx*7+ty*13)%tileImgs[T.GRASS].length]; treesVis.push([tx,ty]); }
       else if(t===T.WATER) img = tileImgs[T.WATER][wf];
-      else if(t===T.BUSH) img = tileImgs[T.GRASS][(tx*7+ty*13)%tileImgs[T.GRASS].length];
+      else if(t===T.BUSH || t===T.BLOCK) img = tileImgs[T.GRASS][(tx*7+ty*13)%tileImgs[T.GRASS].length];
       else if(t===T.PATH) img = tileImgs[T.PATH][(tx*7+ty*13)%tileImgs[T.PATH].length];
       else if(t===T.ROCK){
         const b1 = tileAt(w,tx,ty+1);
@@ -1927,11 +2042,20 @@ function draw(){
   for(const e of w.enemies) if(e.hp>0||e.type==='boss') actors.push({y:e.y, e, isE:true});
   for(const p of players) actors.push({y:p.y, p});
   for(const [ttx,tty] of treesVis) actors.push({y:(tty+1)*TS-2, tr:[ttx,tty]});
+  for(const s of (w.structs||[])) actors.push({y:(s.ty+STRUCTS[s.def].fh)*TS-2, struct:s});
   for(const s of (w.shops||[])) actors.push({y:s.y+8, shop:s});
   for(const m of (w.merchants||[])) actors.push({y:m.y, merch:m});
   actors.sort((a,b)=>a.y-b.y);
   for(const a of actors){
     if(a.tr) dspr(treeImg, a.tr[0]*TS+16-ox, (a.tr[1]+1)*TS-oy-1, treeImg.tscale||2);
+    else if(a.struct){
+      const d = STRUCTS[a.struct.def];
+      if(owSheet.complete && owSheet.naturalWidth)
+        ctx.drawImage(owSheet, d.sx, d.sy, d.w, d.h,
+          a.struct.tx*TS-ox + (d.fw*TS-d.w*2)/2,
+          (a.struct.ty+d.fh)*TS-oy - d.h*2,
+          d.w*2, d.h*2);
+    }
     else if(a.shop) drawShop(a.shop, ox, oy);
     else if(a.merch) dspr(merchImg, a.merch.x-ox, a.merch.y-oy, 2);
     else if(a.isE) drawEnemy(a.e, ox, oy);
@@ -2098,12 +2222,22 @@ function drawPlayer(p, ox, oy){
 function drawEnemy(e, ox, oy){
   const sx = e.x-ox, sy = e.y-oy;
   // ark-sprites för markfiender
-  if(HERO.ready && (e.type==='slime'||e.type==='mini'||e.type==='bslime'||e.type==='skel')){
+  if(HERO.ready && (e.type==='slime'||e.type==='mini'||e.type==='bslime'||e.type==='skel'||e.type==='redball'||e.type==='spitter'||e.type==='sleeper')){
     shadow(sx, sy, e.r*0.9);
     let fr, sc = 1.5;
     if(e.type==='slime') fr = ENS.ball[Math.floor(time*6+e.x/13)%3];
     else if(e.type==='mini'){ fr = ENS.ball[Math.floor(time*8+e.x/7)%3]; sc = 1; }
+    else if(e.type==='redball') fr = ENS.ball2[Math.floor(time*9+e.x/7)%3];
     else if(e.type==='bslime') fr = ENS.flower[Math.floor(time*8+e.x/11)%8];
+    else if(e.type==='spitter') fr = ENS.flower2[Math.floor(time*5+e.x/11)%8];
+    else if(e.type==='sleeper'){
+      if(e.st!=='awake') fr = ENS.logSleep[Math.floor(time*1.5)%2];
+      else {
+        const dir = Math.abs(e.fx)>Math.abs(e.fy) ? (e.fx>0?3:2) : (e.fy<0?1:0);
+        fr = ENS.log[dir][Math.floor(time*7+e.y/17)%4];
+      }
+      sc = 1.6;
+    }
     else {
       const dir = Math.abs(e.fx)>Math.abs(e.fy) ? (e.fx>0?3:2) : (e.fy<0?1:0);
       fr = ENS.log[dir][Math.floor(time*6+e.y/17)%4];
