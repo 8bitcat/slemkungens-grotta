@@ -1096,128 +1096,179 @@ function buildMini(w){
   }
   w.mini = c;
 }
-function genOverworld(){
+function genOverworld(seed){
   const mw=128, mh=96, t = new Uint8Array(mw*mh);
-  const rng = mulberry32(1337);
-  const w = {mw, mh, t, enemies:[], pickups:[], signs:[], doors:[], shops:[], merchants:[], name:'ow', dark:false};
+  const rng = mulberry32(seed);
+  const ri = (a,b)=>a+((rng()*(b-a+1))|0);
+  const w = {mw, mh, t, enemies:[], pickups:[], signs:[], doors:[], shops:[], merchants:[], structs:[], name:'ow', dark:false};
   const set=(x,y,v)=>{ if(x>=0&&y>=0&&x<mw&&y<mh) t[y*mw+x]=v; };
-  const get=(x,y)=>t[y*mw+x];
-  // kanter + norra bergsbandet + mittryggen (med pass)
+  const get=(x,y)=>(x>=0&&y>=0&&x<mw&&y<mh)?t[y*mw+x]:T.ROCK;
+  // ---- slumpad regionlayout (ny värld varje omgång) ----
+  const ridgeY = ri(38,48);
+  const lakeEast = rng()<0.5;
+  const lakeCx = lakeEast ? ri(94,106) : ri(20,32);
+  const lakeCy = ri(64,76);
+  const forestWest = rng()<0.5;
+  const vilX = ri(46,68), vilY = ri(76,84);
+  const spawnCx = vilX+9, spawnCy = vilY+6;
+  const dungeonX = ri(20,104);
+  let crysX = ri(16,108); while(Math.abs(crysX-dungeonX)<26) crysX = ri(16,108);
+  const pass1X = clamp(spawnCx + ri(-8,8), 10, 118);
+  let pass2X = ri(10,116); while(Math.abs(pass2X-pass1X)<22) pass2X = ri(10,116);
+  let batX = ri(8,118);
+  while(Math.abs(batX-pass1X)<7 || Math.abs(batX-pass2X)<7) batX = ri(8,118);
+  const riverX = clamp(lakeCx + ri(-4,4), 12, 116);
+  // ---- terräng ----
   for(let y=0;y<mh;y++) for(let x=0;x<mw;x++){
     if(y<10) t[y*mw+x]=T.ROCK;
     else if(x<2||x>=mw-2||y>=mh-2) t[y*mw+x]=T.TREE;
-    else if(y>=42&&y<=45 && !(x>=60&&x<=66) && !(x>=96&&x<=102)) t[y*mw+x]=T.ROCK;
+    else if(y>=ridgeY && y<=ridgeY+3 && Math.abs(x-pass1X)>2 && Math.abs(x-pass2X)>2) t[y*mw+x]=T.ROCK;
   }
-  // stora sjön i sydost
+  // sjö
   for(let y=10;y<mh;y++) for(let x=2;x<mw;x++){
-    const dx=(x-100)/13.5, dy=(y-72)/8.5;
+    const dx=(x-lakeCx)/13.5, dy=(y-lakeCy)/8.5;
     if(dx*dx+dy*dy<1 && get(x,y)===T.GRASS) set(x,y,T.WATER);
   }
-  // floden: från norra bergen ner till sjön
-  for(let y=10;y<=64;y++){ set(84,y,T.WATER); set(85,y,T.WATER); }
+  // flod från bergen till sjön
+  for(let y=10;y<=lakeCy;y++){ set(riverX,y,T.WATER); set(riverX+1,y,T.WATER); }
+  // sandkanter
   for(let y=11;y<mh-1;y++) for(let x=3;x<mw-3;x++){
     if(get(x,y)!==T.GRASS) continue;
     if([get(x,y-1),get(x,y+1),get(x-1,y),get(x+1,y)].includes(T.WATER)) set(x,y,T.SAND);
   }
-  // öknen i sydväst (taggig kant)
-  for(let y=52;y<=90;y++) for(let x=2;x<=34;x++){
-    if(x <= 30 - ((y*7)%5) && get(x,y)===T.GRASS) set(x,y,T.SAND);
+  // öknen på motsatt sida mot sjön
+  const dX0 = lakeEast ? 2 : 94, dX1 = lakeEast ? 34 : 126;
+  for(let y=52;y<=90;y++) for(let x=dX0;x<=dX1;x++){
+    const edge = lakeEast ? x <= dX1-4-((y*7)%5) : x >= dX0+4+((y*7)%5);
+    if(edge && get(x,y)===T.GRASS) set(x,y,T.SAND);
   }
-  // huvudstig: spawn -> norra porten (genom västra passet i ryggen)
-  for(let y=10;y<=88;y++){
-    const x0 = 64 + Math.round(2.4*Math.sin(y*0.27));
-    for(let x=x0-1;x<=x0+1;x++) if(get(x,y)!==T.WATER) set(x,y,T.PATH);
-  }
-  // västlig stig till Fladdermusgrottan + östlig till öknen/Kristallgrottan
-  for(let x=31;x<=64;x++) if(get(x,60)!==T.WATER) set(x,60,T.PATH);
-  for(let y=48;y<=60;y++) set(30,y,T.PATH), set(31,y,T.PATH);
-  for(let x=66;x<=100;x++) set(x,48,T.PATH);
-  for(let y=12;y<=48;y++) set(100,y,T.PATH);
-  for(let x=100;x<=109;x++) set(x,11,T.PATH), set(x,12,T.PATH);
-  // broar där östvägen korsar floden
-  set(84,47,T.BRIDGE); set(85,47,T.BRIDGE);
-  set(84,48,T.BRIDGE); set(85,48,T.BRIDGE);
-  // gläntor: spawn + butiker + grottmynningar
-  for(let y=82;y<=88;y++) for(let x=56;x<=74;x++) if(get(x,y)!==T.WATER) set(x,y,T.PATH);
-  for(let y=38;y<=41;y++) for(let x=60;x<=68;x++) if(get(x,y)===T.GRASS||get(x,y)===T.TREE) set(x,y,T.PATH);
-  for(let y=10;y<=11;y++){ for(let x=63;x<=65;x++) set(x,y,T.PATH); for(let x=107;x<=109;x++) set(x,y,T.PATH); }
-  for(let y=46;y<=47;y++) for(let x=29;x<=31;x++) set(x,y,T.PATH);
-  // grottdörrar
-  set(64,9,T.DOOR);  w.doors.push({tx:64,ty:9,to:'du',dx:20.5*TS,dy:31.5*TS});
-  set(108,9,T.DOOR); w.doors.push({tx:108,ty:9,to:'crys',dx:13.5*TS,dy:17.5*TS});
-  set(30,45,T.DOOR); w.doors.push({tx:30,ty:45,to:'bat',dx:13.5*TS,dy:17.5*TS});
-  // träd (tät skog i väst) + blommor
+  // ---- byns torg + byggnader ----
+  for(let y=vilY;y<=vilY+8;y++) for(let x=vilX;x<=vilX+18;x++)
+    if(get(x,y)!==T.WATER && get(x,y)!==T.ROCK) set(x,y,T.PATH);
+  const tryStruct=(def,tx,ty)=>{
+    const d = STRUCTS[def];
+    for(let yy=0;yy<d.fh;yy++) for(let xx=0;xx<d.fw;xx++){
+      const tt = get(tx+xx, ty+yy);
+      if(tt===T.WATER||tt===T.ROCK||tt===T.BLOCK) return;
+    }
+    w.structs.push({def, tx, ty});
+    for(let yy=0;yy<d.fh;yy++) for(let xx=0;xx<d.fw;xx++) set(tx+xx, ty+yy, T.BLOCK);
+  };
+  tryStruct('house1', vilX+1, vilY);
+  tryStruct('fountain', vilX+6, vilY);
+  tryStruct('house2', vilX+10, vilY);
+  tryStruct('hut', vilX+15, vilY);
+  tryStruct('hut', clamp(lakeCx+(lakeEast?-18:14),6,118), clamp(lakeCy-10,14,88));
+  // ---- pass-gläntor + vägnät (broar byggs automatiskt över vatten) ----
+  const glade=(x0,x1,y0,y1)=>{ for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){
+    const tt = get(x,y);
+    if(tt===T.GRASS||tt===T.TREE||tt===T.FLOWER||tt===T.SAND) set(x,y,T.PATH);
+  }};
+  glade(pass1X-1, pass1X+1, ridgeY-1, ridgeY+4);
+  glade(pass2X-1, pass2X+1, ridgeY-1, ridgeY+4);
+  const paint=(x,y)=>{ for(let yy=y;yy<=y+1;yy++) for(let xx=x;xx<=x+1;xx++){
+    const tt = get(xx,yy);
+    if(tt===T.WATER) set(xx,yy,T.BRIDGE);
+    else if(tt===T.GRASS||tt===T.TREE||tt===T.FLOWER||tt===T.SAND||tt===T.BUSH) set(xx,yy,T.PATH);
+  }};
+  const road=(x0,y0,x1,y1)=>{
+    let x=x0, y=y0, guard=0;
+    while((x!==x1||y!==y1) && guard++<600){
+      paint(x,y);
+      const dx=x1-x, dy=y1-y;
+      if(Math.abs(dx)>Math.abs(dy)) x+=Math.sign(dx); else y+=Math.sign(dy);
+      if(rng()<0.22){ if(dy && Math.abs(dx)>Math.abs(dy)) y+=Math.sign(dy); else if(dx) x+=Math.sign(dx); }
+    }
+    paint(x1,y1);
+  };
+  const passC = Math.abs(crysX-pass2X)<Math.abs(crysX-pass1X) ? pass2X : pass1X;
+  road(spawnCx, vilY+3, pass1X, ridgeY+5);
+  road(pass1X, ridgeY-1, dungeonX, 12);
+  road(spawnCx, spawnCy, passC, ridgeY+5);
+  road(passC, ridgeY-1, crysX, 12);
+  road(spawnCx, spawnCy, batX, ridgeY+6);
+  road(spawnCx, spawnCy, clamp(lakeCx+(lakeEast?-16:16),6,120), clamp(lakeCy-4,14,90));
+  // ---- grottdörrar + gläntor framför ----
+  glade(dungeonX-1, dungeonX+1, 10, 11);
+  glade(crysX-1, crysX+1, 10, 11);
+  glade(batX-1, batX+1, ridgeY+4, ridgeY+5);
+  set(dungeonX,9,T.DOOR); w.doors.push({tx:dungeonX,ty:9,to:'du',dx:20.5*TS,dy:31.5*TS});
+  set(crysX,9,T.DOOR);    w.doors.push({tx:crysX,ty:9,to:'crys',dx:13.5*TS,dy:17.5*TS});
+  set(batX,ridgeY+3,T.DOOR); w.doors.push({tx:batX,ty:ridgeY+3,to:'bat',dx:13.5*TS,dy:17.5*TS});
+  w.back = {
+    du:  {x:(dungeonX+0.5)*TS, y:11.5*TS},
+    crys:{x:(crysX+0.5)*TS, y:11.5*TS},
+    bat: {x:(batX+0.5)*TS, y:(ridgeY+4.5)*TS}
+  };
+  // ---- skog, blommor, högt gräs ----
+  const inForest=(x,y)=> (forestWest ? x<50 : x>78) && y>13 && y<ridgeY-2;
   for(let y=11;y<mh-2;y++) for(let x=2;x<mw-2;x++){
     if(get(x,y)!==T.GRASS) continue;
-    if(dist(x,y,64,85)<8) continue;
-    const dense = (x<52 && y>13 && y<41) ? 0.07 : 0.025;
+    if(dist(x,y,spawnCx,spawnCy)<10) continue;
+    const dense = inForest(x,y) ? 0.07 : 0.025;
     const r = rng();
     if(r<dense) set(x,y,T.TREE);
     else if(r<dense+0.05) set(x,y,T.FLOWER);
   }
-  // klippbart högt gräs i dungar
   for(let i=0;i<80;i++){
     const gx = 4+((rng()*(mw-8))|0), gy = 12+((rng()*(mh-16))|0);
     for(let k=0;k<6;k++){
       const x = gx+((rng()*3)|0)-1, y = gy+((rng()*3)|0)-1;
-      if(x>1 && y>10 && x<mw-2 && y<mh-2 && get(x,y)===T.GRASS && dist(x,y,64,85)>6) set(x,y,T.BUSH);
+      if(x>1 && y>10 && x<mw-2 && y<mh-2 && get(x,y)===T.GRASS && dist(x,y,spawnCx,spawnCy)>7) set(x,y,T.BUSH);
     }
   }
-  // byn: hus, brunn och hyddor längs torgets norrkant
-  w.structs = [
-    {def:'house1', tx:57, ty:80},
-    {def:'fountain', tx:62, ty:80},
-    {def:'house2', tx:66, ty:80},
-    {def:'hut', tx:71, ty:80},
-    {def:'hut', tx:88, ty:58}
-  ];
-  for(const s of w.structs){
-    const d = STRUCTS[s.def];
-    for(let yy=0;yy<d.fh;yy++) for(let xx=0;xx<d.fw;xx++) set(s.tx+xx, s.ty+yy, T.BLOCK);
-  }
-  // butik 1 (vid spawn): dryck, hjärta, stövlar
-  w.merchants.push({x:70.5*TS, y:82.2*TS});
-  [['potion',68.5],['heart',70.5],['spd',72.5]].forEach(([kind,tx])=>{
-    w.shops.push({x:tx*TS, y:83.6*TS, kind});
+  // ---- butiker ----
+  w.merchants.push({x:(vilX+13.5)*TS, y:(vilY+2.2)*TS});
+  [['potion',vilX+11.5],['heart',vilX+13.5],['spd',vilX+15.5]].forEach(([kind,tx])=>{
+    w.shops.push({x:tx*TS, y:(vilY+3.6)*TS, kind});
   });
-  // butik 2 (norr om passet): vapen, amulett, hjärta
-  w.merchants.push({x:64*TS, y:38.4*TS});
-  [['dmg',62],['cdr',64],['heart',66]].forEach(([kind,tx])=>{
-    w.shops.push({x:tx*TS, y:39.8*TS, kind});
+  w.merchants.push({x:pass1X*TS, y:(ridgeY-2.6)*TS});
+  [['dmg',pass1X-2],['cdr',pass1X],['heart',pass1X+2]].forEach(([kind,tx])=>{
+    w.shops.push({x:tx*TS, y:(ridgeY-1.2)*TS, kind});
   });
-  // skyltar
-  const sign=(x,y,txt)=>{ set(x,y,T.SIGN); w.signs.push({tx:x,ty:y,txt}); };
-  sign(57,81,'Välkomna, hjältar! Följ stigen norrut mot äventyret.');
-  sign(61,61,'Väst: Fladdermusgrottan & Öknen · Öst: Sjön · Norr: Slemkungen');
-  sign(68,47,'Genom passet: Slemkungens rike · Öst: Öknen');
-  sign(33,46,'Fladdermusgrottan — hör du vingslagen?');
-  sign(66,12,'VARNING: Slemkungens grotta. Vänd om... eller bli legender!');
-  sign(104,13,'Kristallgrottan — glittrar det där inne?');
-  sign(36,50,'Öknen — här härskar blomstermonstren.');
-  // fiender per region
+  // ---- skyltar (bara på gräs) ----
+  const sign=(x,y,txt)=>{
+    if(get(x,y)!==T.GRASS && get(x,y)!==T.FLOWER) return;
+    set(x,y,T.SIGN); w.signs.push({tx:x,ty:y,txt});
+  };
+  sign(vilX-1, vilY+3, 'Välkomna till byn! Norrut väntar Slemkungen.');
+  sign(pass1X+3, ridgeY+6, 'Genom passet: Slemkungens rike.');
+  sign(dungeonX+2, 12, 'VARNING: Slemkungens grotta. Vänd om... eller bli legender!');
+  sign(crysX+2, 13, 'Kristallgrottan — glittrar det där inne?');
+  sign(batX+3, ridgeY+5, 'Fladdermusgrottan — hör du vingslagen?');
+  sign(lakeEast ? 38 : 90, 55, 'Öknen — här härskar blomstermonstren.');
+  // ---- fiender per region ----
   const place = (type,n,xmin,xmax,ymin,ymax)=>{
+    xmin=clamp(xmin,4,mw-4); xmax=clamp(xmax,4,mw-4);
+    ymin=clamp(ymin,12,mh-4); ymax=clamp(ymax,12,mh-4);
     let placed=0, guard=0;
     while(placed<n && guard++<800){
-      const x=xmin+((rng()*(xmax-xmin))|0), y=ymin+((rng()*(ymax-ymin))|0);
+      const x=xmin+((rng()*(xmax-xmin+1))|0), y=ymin+((rng()*(ymax-ymin+1))|0);
       if(SOLID.has(get(x,y)) || get(x,y)===T.DOOR) continue;
-      if(dist(x,y,64,85)<13) continue;
+      if(dist(x,y,spawnCx,spawnCy)<13) continue;
       spawnEnemy(w, type, x, y); placed++;
     }
   };
-  place('slime',18,4,96,50,90);
-  place('slime',8,4,124,12,40);
-  place('bat',10,4,52,14,40);
-  place('skel',8,52,124,12,40);
-  place('bslime',8,4,30,54,88);
-  place('bslime',2,58,70,13,20);
-  place('redball',6,4,30,54,88);
-  place('spitter',4,4,52,14,40);
-  place('spitter',4,80,120,50,66);
-  place('sleeper',6,40,124,12,44);
-  // hjärtan utspridda i världen
-  [[20,60],[90,20],[118,40],[40,20],[86,60]].forEach(([x,y])=>{
-    if(!SOLID.has(get(x,y))) w.pickups.push({kind:'heart',x:(x+0.5)*TS,y:(y+0.5)*TS,vx:0,vy:0,t:0});
-  });
+  const fX0 = forestWest ? 4 : 78, fX1 = forestWest ? 50 : 124;
+  place('slime',18, 4,124, ridgeY+6, 90);
+  place('slime',8, 4,124, 12, ridgeY-2);
+  place('bat',10, fX0,fX1, 14, ridgeY-2);
+  place('skel',8, 4,124, 12, ridgeY-2);
+  place('bslime',8, dX0,dX1, 54, 88);
+  place('redball',6, dX0,dX1, 54, 88);
+  place('spitter',4, fX0,fX1, 14, ridgeY-2);
+  place('spitter',4, lakeCx-16,lakeCx+16, lakeCy-14, lakeCy);
+  place('sleeper',6, 4,124, 12, ridgeY-2);
+  // ---- hjärtan ----
+  let hearts=0, hg=0;
+  while(hearts<5 && hg++<300){
+    const x=ri(6,120), y=ri(14,90);
+    if(get(x,y)===T.GRASS && dist(x,y,spawnCx,spawnCy)>15){
+      w.pickups.push({kind:'heart',x:(x+0.5)*TS,y:(y+0.5)*TS,vx:0,vy:0,t:0});
+      hearts++;
+    }
+  }
+  w.spawn = {x:spawnCx*TS, y:spawnCy*TS};
   buildMini(w);
   return w;
 }
@@ -1240,19 +1291,23 @@ function genCave(key, opts){
   buildMini(w);
   return w;
 }
+let worldSeed = 0;
 function buildWorlds(n){
+  worldSeed = (Math.random()*2147483647)|0;
+  const ow = genOverworld(worldSeed);
+  const du = genDungeon(n);
+  du.doors[0].dx = ow.back.du.x; du.doors[0].dy = ow.back.du.y;
   return {
-    ow: genOverworld(),
-    du: genDungeon(n),
+    ow, du,
     bat: genCave('bat', {
-      retX:30.5*TS, retY:46.5*TS,
+      retX: ow.back.bat.x, retY: ow.back.bat.y,
       enemies:[['bat',6,4],['bat',9,6],['bat',16,4],['bat',19,6],['bat',12,3],['bat',7,7],['skel',13,5],['skel',18,3]],
       coins:[[5,3],[6,4],[7,3],[8,5],[15,6],[16,5],[17,7],[18,6],[20,3],[19,7]],
       hearts:[[5,7],[20,7]],
       shops:[['heart',10,3]]
     }),
     crys: genCave('crys', {
-      retX:108.5*TS, retY:10.5*TS,
+      retX: ow.back.crys.x, retY: ow.back.crys.y,
       enemies:[['bslime',6,4],['redball',18,5],['bslime',12,6],['redball',8,7],['mini',10,4],['mini',14,3],['sleeper',16,7],['mini',6,6]],
       coins:[[4,2],[5,3],[6,2],[7,4],[18,2],[19,3],[20,2],[21,4],[12,2],[13,3],[11,7],[15,6],[9,2],[17,3]],
       hearts:[[13,7]],
@@ -1343,19 +1398,23 @@ function dropIn(j){
   toast(p.cls.name+' hoppar in i äventyret!');
 }
 function startGame(){
-  players = joiners.map((j,i)=>makePlayer(i, j.ctrlId, CLASSES[j.ci], (60+i*1.3)*TS+(i%2)*14, 85.5*TS));
+  worlds = buildWorlds(joiners.length);
+  const sp = worlds.ow.spawn;
+  players = joiners.map((j,i)=>makePlayer(i, j.ctrlId, CLASSES[j.ci], sp.x+(i%3-1)*36, sp.y+Math.floor(i/3)*30));
   joiners = [];
-  worlds = buildWorlds(players.length);
   cur = 'ow'; shots=[]; parts=[]; texts=[]; coins=0; camSnap=true;
   bossDefeated=false; bannerT=0;
   paused=false; state='play';
+  toast('En ny värld har skapats — nr '+(worldSeed%10000)+'!');
 }
 function resetRun(){
   worlds = buildWorlds(players.length);
   cur='ow'; shots=[]; parts=[]; texts=[]; camSnap=true;
   bossDefeated=false; bannerT=0;
+  toast('En ny värld har skapats — nr '+(worldSeed%10000)+'!');
   players.forEach((p,i)=>{
-    p.x=(60+i*1.3)*TS+(i%2)*14; p.y=85.5*TS;
+    const sp = worlds.ow.spawn;
+    p.x=sp.x+(i%3-1)*36; p.y=sp.y+Math.floor(i/3)*30;
     p.maxhp = p.cls.hp + p.up.hp*2; p.hp = p.maxhp; p.downed=false;
     p.cdA=0; p.cdS=0; p.invT=0; p.dashT=0; p.reviveT=0; p.kbx=0; p.kby=0;
     p.stats={dmg:0,heal:0,downs:0,kills:0};
@@ -2756,6 +2815,7 @@ window.__TILE = (tx,ty)=>tileAt(CW(), tx, ty);
 window.__GOTO = (wname,tx,ty)=>{ cur=wname; players.forEach((p,i)=>{ p.x=(tx+i*0.8)*TS; p.y=ty*TS; }); shots=[]; camSnap=true; };
 window.__KILLBOSS = ()=>{ const b=bossRef(); if(b && !b.dead){ b.active=true; damageEnemy(b, 99999, b.x, b.y, players[0]); } };
 window.__STATE = ()=>({ bossDefeated, paused, banner:bannerT>0 });
+window.__OW = ()=>({ seed:worldSeed, spawn:worlds.ow.spawn, back:worlds.ow.back });
 window.__FINDBUSH = ()=>{
   const w = CW();
   for(let ty=12;ty<w.mh-2;ty++) for(let tx=2;tx<w.mw-2;tx++)
